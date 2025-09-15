@@ -153,6 +153,17 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
   const [showCivilian, setShowCivilian] = useLocalStorage('adsbShowCivilian', true);
   const [searchRadius, setSearchRadius] = useLocalStorage('adsbSearchRadius', 100); // km radius for API search
   const [error, setError] = React.useState<string | null>(null);
+  const [hardwareStatus, setHardwareStatus] = React.useState<{
+    rtlsdr_connected: boolean;
+    dump1090_running: boolean;
+    last_test: Date | null;
+    test_result: string | null;
+  }>({
+    rtlsdr_connected: false,
+    dump1090_running: false,
+    last_test: null,
+    test_result: null
+  });
 
   // Fetch live ADS-B data from ADSBExchange
   const fetchADSBData = async () => {
@@ -160,9 +171,44 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      // Connect to local RTL-SDR ADS-B server
-      // This assumes you're running dump1090 or similar on localhost:8080
-      const response = await fetch('http://localhost:8080/data/aircraft.json', {
+      // Test multiple common RTL-SDR endpoints
+      const endpoints = [
+        'http://localhost:8080/data/aircraft.json',  // dump1090-mutability
+        'http://localhost:30003/data/aircraft.json', // dump1090-fa
+        'http://localhost:8080/data.json',           // alternative format
+        'http://127.0.0.1:8080/data/aircraft.json'   // explicit localhost
+      ];
+      
+      let response = null;
+      let workingEndpoint = null;
+      
+      for (const endpoint of endpoints) {
+        try {
+          response = await fetch(endpoint, {
+            method: 'GET',
+            signal: AbortSignal.timeout(3000)
+          });
+          if (response.ok) {
+            workingEndpoint = endpoint;
+            break;
+          }
+        } catch (e) {
+          continue; // Try next endpoint
+        }
+      }
+      
+      if (!response || !response.ok) {
+        throw new Error(`RTL-SDR Server not found. Tried ports 8080, 30003. Make sure dump1090 is running.`);
+      }
+      
+      setHardwareStatus(prev => ({
+        ...prev,
+        dump1090_running: true,
+        last_test: new Date(),
+        test_result: `Connected to ${workingEndpoint}`
+      }));
+
+      const data = await response.json();
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       });
@@ -174,7 +220,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       const data = await response.json();
       
       if (!data.aircraft || !Array.isArray(data.aircraft)) {
-        throw new Error('Invalid RTL-SDR data format');
+        throw new Error('Invalid RTL-SDR data format - no aircraft array found');
       }
 
       // Transform RTL-SDR data (dump1090 format) to our Aircraft interface
@@ -212,14 +258,73 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       setLastUpdate(new Date());
     } catch (error: any) {
       console.error('Error fetching RTL-SDR data:', error);
-      setError(`RTL-SDR Error: ${error.message}`);
+      setError(error.message);
       setIsConnected(false);
       setAircraft([]);
+      setHardwareStatus(prev => ({
+        ...prev,
+        dump1090_running: false,
+        last_test: new Date(),
+        test_result: `Error: ${error.message}`
+      }));
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Test RTL-SDR hardware connection
+  const testRTLSDR = async () => {
+    setHardwareStatus(prev => ({ ...prev, test_result: 'Testing...' }));
+    
+    try {
+      // Test if RTL-SDR device is detected
+      const testEndpoints = [
+        { url: 'http://localhost:8080/data/aircraft.json', name: 'dump1090 (port 8080)' },
+        { url: 'http://localhost:30003/data/aircraft.json', name: 'dump1090-fa (port 30003)' },
+        { url: 'http://localhost:8080/', name: 'dump1090 web interface' }
+      ];
+      
+      let results = [];
+      
+      for (const endpoint of testEndpoints) {
+        try {
+          const response = await fetch(endpoint.url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000)
+          });
+          
+          if (response.ok) {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const data = await response.json();
+              results.push(`✓ ${endpoint.name}: JSON data (${data.aircraft?.length || 0} aircraft)`);
+            } else {
+              results.push(`✓ ${endpoint.name}: Web interface accessible`);
+            }
+          } else {
+            results.push(`✗ ${endpoint.name}: HTTP ${response.status}`);
+          }
+        } catch (e) {
+          results.push(`✗ ${endpoint.name}: Connection failed`);
+        }
+      }
+      
+      setHardwareStatus(prev => ({
+        ...prev,
+        last_test: new Date(),
+        test_result: results.join('\n'),
+        rtlsdr_connected: results.some(r => r.includes('✓')),
+        dump1090_running: results.some(r => r.includes('JSON data'))
+      }));
+      
+    } catch (error: any) {
+      setHardwareStatus(prev => ({
+        ...prev,
+        last_test: new Date(),
+        test_result: `Test failed: ${error.message}`
+      }));
+    }
+  };
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {
     // Initial fetch
@@ -629,11 +734,55 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               {/* Hardware Status */}
               <div className="lattice-panel p-4">
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
-                {error && (
-                  <div className="lattice-panel border-red-400 p-2 mb-3 bg-red-900/30">
-                    <div className="text-xs lattice-status-error">{error}</div>
+                
+                {/* RTL-SDR Status */}
+                <div className="lattice-panel p-3 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs lattice-text-secondary">RTL-SDR Hardware</span>
+                    <span className={`text-xs font-semibold ${hardwareStatus.rtlsdr_connected ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {hardwareStatus.rtlsdr_connected ? 'DETECTED' : 'NOT FOUND'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs lattice-text-secondary">dump1090 Server</span>
+                    <span className={`text-xs font-semibold ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {hardwareStatus.dump1090_running ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={testRTLSDR}
+                    className="lattice-button text-xs px-3 py-1 w-full flex items-center justify-center space-x-1"
+                  >
+                    <Zap className="h-3 w-3" />
+                    <span>Test RTL-SDR Connection</span>
+                  </button>
+                </div>
+                
+                {/* Test Results */}
+                {hardwareStatus.test_result && (
+                  <div className="lattice-panel p-3 mb-3">
+                    <div className="text-xs lattice-text-secondary mb-1">Test Results:</div>
+                    <div className="text-xs lattice-text-mono lattice-text-primary whitespace-pre-line">
+                      {hardwareStatus.test_result}
+                    </div>
+                    {hardwareStatus.last_test && (
+                      <div className="text-xs lattice-text-muted mt-2">
+                        Last test: {hardwareStatus.last_test.toLocaleTimeString()}
+                      </div>
+                    )}
                   </div>
                 )}
+                
+                {error && (
+                  <div className="lattice-panel border-red-400 p-2 mb-3 bg-red-900/30">
+                    <div className="text-xs lattice-status-error font-semibold mb-1">Connection Error:</div>
+                    <div className="text-xs lattice-text-primary">{error}</div>
+                    <div className="text-xs lattice-text-muted mt-2">
+                      Make sure RTL-SDR is connected and dump1090 is running
+                    </div>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <label className="text-xs lattice-text-secondary block mb-1">
@@ -686,13 +835,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="lattice-text-secondary">
                     Hardware: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      RTL-SDR USB
+                      {hardwareStatus.rtlsdr_connected ? 'RTL-SDR USB' : 'Not Detected'}
                     </span>
                   </div>
                   <div className="lattice-text-secondary">
                     Data Source: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      dump1090 (localhost:8080)
+                      {hardwareStatus.dump1090_running ? 'dump1090 (local)' : 'No Server'}
                     </span>
                   </div>
                 </div>

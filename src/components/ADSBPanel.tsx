@@ -173,10 +173,10 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     try {
       // Test multiple common RTL-SDR endpoints
       const endpoints = [
-        'http://localhost:8080/data/aircraft.json',  // dump1090-mutability
-        'http://localhost:30003/data/aircraft.json', // dump1090-fa
-        'http://localhost:8080/data.json',           // alternative format
-        'http://127.0.0.1:8080/data/aircraft.json'   // explicit localhost
+        'http://localhost/dump1090-mutability/data/aircraft.json', // Standard lighttpd path for dump1090-mutability
+        'http://localhost:8080/data/aircraft.json',  // dump1090-mutability direct (fallback)
+        'http://localhost:30003/data/aircraft.json', // dump1090-fa (fallback)
+        'http://127.0.0.1/dump1090-mutability/data/aircraft.json'   // explicit localhost lighttpd
       ];
       
       let response = null;

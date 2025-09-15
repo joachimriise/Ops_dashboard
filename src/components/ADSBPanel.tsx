@@ -209,15 +209,6 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       }));
 
       const data = await response.json();
-        method: 'GET',
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (!response.ok) {
-        throw new Error(`RTL-SDR Server Error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
       
       if (!data.aircraft || !Array.isArray(data.aircraft)) {
         throw new Error('Invalid RTL-SDR data format - no aircraft array found');
@@ -225,8 +216,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
 
       // Transform RTL-SDR data (dump1090 format) to our Aircraft interface
       const aircraftData: Aircraft[] = data.aircraft.map((ac: any) => {
-        const refLat = gpsData?.latitude || lat;
-        const refLon = gpsData?.longitude || lon;
+        const refLat = gpsData?.latitude || 59.9139;
+        const refLon = gpsData?.longitude || 10.7522;
         
         // dump1090 JSON format
         const aircraft: Aircraft = {

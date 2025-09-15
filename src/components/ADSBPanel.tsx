@@ -160,64 +160,61 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      // Use default coordinates (Oslo, Norway) if GPS not available
-      const lat = gpsData?.latitude || 59.9139;
-      const lon = gpsData?.longitude || 10.7522;
-      
-      // Use a public ADS-B API that doesn't require authentication
-      // OpenSky Network API as fallback
-      const apiUrl = `https://opensky-network.org/api/states/all?lamin=${lat-1}&lomin=${lon-1}&lamax=${lat+1}&lomax=${lon+1}`;
-      
-      const response = await fetch(apiUrl, {
+      // Connect to local RTL-SDR ADS-B server
+      // This assumes you're running dump1090 or similar on localhost:8080
+      const response = await fetch('http://localhost:8080/data/aircraft.json', {
         method: 'GET',
-        signal: AbortSignal.timeout(15000)
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        throw new Error(`RTL-SDR Server Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
       
-      if (!data.states || !Array.isArray(data.states)) {
-        throw new Error('Invalid API response format');
+      if (!data.aircraft || !Array.isArray(data.aircraft)) {
+        throw new Error('Invalid RTL-SDR data format');
       }
 
-      // Transform OpenSky API data to our Aircraft interface
-      const aircraftData: Aircraft[] = data.states.map((state: any[]) => {
+      // Transform RTL-SDR data (dump1090 format) to our Aircraft interface
+      const aircraftData: Aircraft[] = data.aircraft.map((ac: any) => {
         const refLat = gpsData?.latitude || lat;
         const refLon = gpsData?.longitude || lon;
         
-        // OpenSky API format: [icao24, callsign, origin_country, time_position, last_contact, longitude, latitude, baro_altitude, on_ground, velocity, true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source]
+        // dump1090 JSON format
         const aircraft: Aircraft = {
-          icao: state[0] || 'UNKNOWN',
-          callsign: state[1]?.trim() || 'UNKNOWN',
-          latitude: state[6] || 0,
-          longitude: state[5] || 0,
-          altitude: Math.round((state[7] || 0) * 3.28084), // Convert meters to feet
-          speed: Math.round((state[9] || 0) * 1.94384), // Convert m/s to knots
-          heading: state[10] || 0,
-          vertical_rate: Math.round((state[11] || 0) * 196.85), // Convert m/s to ft/min
-          squawk: state[14] || '0000',
-          aircraft_type: 'UNKNOWN', // OpenSky doesn't provide aircraft type
+          icao: ac.hex || 'UNKNOWN',
+          callsign: ac.flight?.trim() || 'UNKNOWN',
+          latitude: ac.lat || 0,
+          longitude: ac.lon || 0,
+          altitude: ac.alt_baro || 0, // Already in feet
+          speed: ac.gs || 0, // Already in knots
+          heading: ac.track || 0,
+          vertical_rate: ac.baro_rate || 0, // Already in ft/min
+          squawk: ac.squawk || '0000',
+          aircraft_type: ac.category || 'UNKNOWN',
           last_seen: new Date(),
-          distance: getDistance(refLat, refLon, state[6] || 0, state[5] || 0),
-          bearing: getBearing(refLat, refLon, state[6] || 0, state[5] || 0)
+          distance: ac.lat && ac.lon ? getDistance(refLat, refLon, ac.lat, ac.lon) : undefined,
+          bearing: ac.lat && ac.lon ? getBearing(refLat, refLon, ac.lat, ac.lon) : undefined
         };
         
         return aircraft;
-      }).filter((ac: Aircraft) => 
-        ac.latitude !== 0 && ac.longitude !== 0 && !isNaN(ac.latitude) && !isNaN(ac.longitude) // Filter out aircraft without valid position data
-      );
+      }).filter((ac: Aircraft) => {
+        // Filter out aircraft without valid position data
+        return ac.latitude !== 0 && ac.longitude !== 0 && 
+               !isNaN(ac.latitude) && !isNaN(ac.longitude) &&
+               ac.icao !== 'UNKNOWN';
+      });
 
       setAircraft(aircraftData);
       setIsConnected(true);
       setLastUpdate(new Date());
     } catch (error: any) {
-      console.error('Error fetching ADS-B data:', error);
-      setError(`API Error: ${error.message}`);
+      console.error('Error fetching RTL-SDR data:', error);
+      setError(`RTL-SDR Error: ${error.message}`);
       setIsConnected(false);
-      setAircraft([]); // Clear aircraft data on error
+      setAircraft([]);
     } finally {
       setIsLoading(false);
     }
@@ -228,10 +225,10 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Initial fetch
     fetchADSBData();
 
-    // Set up interval for live updates every 10 seconds
+    // Set up interval for live updates every 2 seconds (RTL-SDR is local and fast)
     const interval = setInterval(() => {
       fetchADSBData();
-    }, 10000);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [gpsData]);
@@ -437,8 +434,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             ) : error ? (
               <div className="text-center lattice-text-muted py-8">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 lattice-status-error" />
-                <p className="lattice-status-error">Error loading data</p>
+                <p className="lattice-status-error">RTL-SDR Connection Error</p>
                 <p className="text-xs mt-2 lattice-text-secondary">{error}</p>
+                <p className="text-xs mt-1 lattice-text-secondary">Make sure dump1090 is running on localhost:8080</p>
                 <button
                   onClick={fetchADSBData}
                   className="lattice-button text-xs px-3 py-1 mt-3"
@@ -449,15 +447,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             ) : !isConnected ? (
               <div className="text-center lattice-text-muted py-8">
                 <Radar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>ADS-B receiver offline</p>
-                <p className="text-xs mt-2">Check hardware connection</p>
+                <p>RTL-SDR receiver offline</p>
+                <p className="text-xs mt-2">Check RTL-SDR hardware and dump1090 server</p>
               </div>
             ) : filteredAircraft.length === 0 ? (
               <div className="text-center lattice-text-muted py-8">
                 <Plane className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No aircraft detected</p>
-                <p className="text-xs mt-2">No aircraft in {searchRadius}km radius</p>
-                <p className="text-xs mt-1">Try increasing search radius</p>
+                <p className="text-xs mt-2">No aircraft in RTL-SDR range</p>
+                <p className="text-xs mt-1">Check antenna and receiver position</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -664,7 +662,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="lattice-text-secondary">
                     Connection: 
                     <span className={`font-semibold ml-1 ${isConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {isLoading ? 'Loading...' : isConnected ? 'Connected' : 'Offline'}
+                      {isLoading ? 'Loading...' : isConnected ? 'RTL-SDR Online' : 'RTL-SDR Offline'}
                     </span>
                   </div>
                   <div className="lattice-text-secondary">
@@ -682,19 +680,19 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="lattice-text-secondary">
                     Update Rate: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      0.1Hz (10s)
+                      0.5Hz (2s)
                     </span>
                   </div>
                   <div className="lattice-text-secondary">
-                    GPS Status: 
-                    <span className={`font-semibold ml-1 ${gpsData?.connected ? 'lattice-status-good' : 'lattice-status-warning'}`}>
-                      {gpsData?.connected ? 'Connected' : 'Using Default Location'}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    API Source: 
+                    Hardware: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      ADSBExchange
+                      RTL-SDR USB
+                    </span>
+                  </div>
+                  <div className="lattice-text-secondary">
+                    Data Source: 
+                    <span className="lattice-text-primary font-semibold ml-1">
+                      dump1090 (localhost:8080)
                     </span>
                   </div>
                 </div>

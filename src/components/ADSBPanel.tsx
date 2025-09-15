@@ -209,7 +209,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       }));
 
       const data = await response.json();
-
+      
       if (!data.aircraft || !Array.isArray(data.aircraft)) {
         throw new Error('Invalid RTL-SDR data format - no aircraft array found');
       }

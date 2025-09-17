@@ -140,7 +140,6 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
 export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBPanelProps) {
   const [adsbLayer, setAdsbLayer] = React.useState<'map' | 'aircraft' | 'settings'>('map');
   const [aircraft, setAircraft] = React.useState<Aircraft[]>([]);
-  const [isConnected, setIsConnected] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [lastUpdate, setLastUpdate] = React.useState<Date>(new Date());
   const [selectedAircraft, setSelectedAircraft] = React.useState<string | null>(null);
@@ -245,15 +244,19 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       setAircraft(aircraftData);
-      setIsConnected(true);
+      setHardwareStatus(prev => ({
+        ...prev,
+        dump1090_running: true,
+        rtlsdr_connected: true
+      }));
       setLastUpdate(new Date());
     } catch (error: any) {
       console.error('Error fetching RTL-SDR data:', error);
       setError(error.message);
-      setIsConnected(false);
       setAircraft([]);
       setHardwareStatus(prev => ({
         ...prev,
+        rtlsdr_connected: false,
         dump1090_running: false,
         last_test: new Date(),
         test_result: `Error: ${error.message}`
@@ -366,7 +369,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             <span className="text-sm font-semibold lattice-text-primary">ADS-B Surveillance</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+            <div className={`w-2 h-2 rounded-full ${hardwareStatus.dump1090_running ? 'bg-green-400' : 'bg-red-400'}`} />
             <span className="text-xs lattice-text-secondary">
               {filteredAircraft.length} aircraft
             </span>
@@ -415,8 +418,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           
           <div className="flex items-center space-x-1 ml-auto px-2 py-1 lattice-panel rounded">
             <span className="text-xs lattice-text-secondary flex items-center">
-              <Radar className={`h-3 w-3 mr-1 ${isConnected ? 'lattice-status-good' : 'lattice-status-error'}`} />
-              ADS-B: {isConnected ? 'Online' : 'Offline'}
+              <Radar className={`h-3 w-3 mr-1 ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`} />
+              ADS-B: {hardwareStatus.dump1090_running ? 'Online' : 'Offline'}
             </span>
           </div>
         </div>
@@ -540,7 +543,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   Retry
                 </button>
               </div>
-            ) : !isConnected ? (
+            ) : !hardwareStatus.dump1090_running ? (
               <div className="text-center lattice-text-muted py-8">
                 <Radar className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>RTL-SDR receiver offline</p>
@@ -801,8 +804,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   </div>
                   <div className="lattice-text-secondary">
                     Connection: 
-                    <span className={`font-semibold ml-1 ${isConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {isLoading ? 'Loading...' : isConnected ? 'RTL-SDR Online' : 'RTL-SDR Offline'}
+                    <span className={`font-semibold ml-1 ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {isLoading ? 'Loading...' : hardwareStatus.dump1090_running ? 'RTL-SDR Online' : 'RTL-SDR Offline'}
                     </span>
                   </div>
                   <div className="lattice-text-secondary">

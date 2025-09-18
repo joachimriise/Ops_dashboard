@@ -315,6 +315,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           reason: `Health check failed (${response.status})`,
           timestamp: Date.now(),
         });
+        setHardwareConnected(false);
         return;
       }
 
@@ -324,6 +325,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           reason: 'Proxy returned HTML instead of JSON',
           timestamp: Date.now(),
         });
+        setHardwareConnected(false);
         return;
       }
 
@@ -336,14 +338,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           reason: 'Invalid JSON from proxy',
           timestamp: Date.now(),
         });
+        setHardwareConnected(false);
         return;
       }
 
       setHealthStatus(healthData);
       
       // Update hardware connection status
-      const isHardwareConnected = healthData.rtl && 
-        (healthData.rtl.status === 'BUSY' || healthData.rtl.status === 'ONLINE');
+      const isHardwareConnected = healthData.rtlsdr && 
+        (healthData.rtlsdr.status === 'BUSY' || healthData.rtlsdr.status === 'ONLINE');
       setHardwareConnected(isHardwareConnected);
     } catch (error: any) {
       setHealthStatus({
@@ -840,9 +843,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   </div>
                   <div>
                     <div className="lattice-text-secondary">RTL-SDR:</div>
-                    <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
                       {hardwareConnected ? (
-                        healthStatus.rtl?.status === 'BUSY' ? 'Connected (In Use)' : 'Connected (Available)'
+                        healthStatus.rtlsdr?.status === 'BUSY' ? 'Connected (In Use)' : 'Connected (Available)'
                       ) : (
                         'Not Detected'
                       )}
@@ -902,7 +905,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 {!hardwareConnected && healthStatus.rtl?.detail && (
                   <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
                     <div className="text-xs lattice-status-error font-semibold mb-1">Hardware Status:</div>
-                    <div className="text-xs lattice-text-primary">{healthStatus.rtl.detail}</div>
+                    <div className="text-xs lattice-text-primary">{healthStatus.rtlsdr?.detail}</div>
                   </div>
                 )}
                 

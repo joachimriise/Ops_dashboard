@@ -184,7 +184,7 @@ app.get('/diagnostics', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     service: 'ADS-B Proxy Server',
-    version: '1.1.0',
+    rtlsdr: rtlsdr,
     endpoints: {
       aircraft: '/aircraft.json',
       health: '/health',

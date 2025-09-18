@@ -3,7 +3,6 @@ import { Navigation, Plane, Settings, Radar, AlertTriangle, MapPin, Clock, Zap, 
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, LatLngTuple } from 'leaflet';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import ADSBStatusPanel from './ADSBStatusPanel';
 import 'leaflet/dist/leaflet.css';
 
 interface Aircraft {
@@ -157,6 +156,7 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
 
 export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBPanelProps) {
   const [adsbLayer, setAdsbLayer] = React.useState<'map' | 'aircraft' | 'settings' | 'status'>('map');
+  const [adsbLayer, setAdsbLayer] = React.useState<'map' | 'aircraft' | 'settings'>('map');
   const [aircraft, setAircraft] = React.useState<Aircraft[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [lastUpdate, setLastUpdate] = React.useState<Date>(new Date());
@@ -479,17 +479,6 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             >
               <Settings className="h-3 w-3 inline mr-1" />
               Settings
-            </button>
-            <button
-              onClick={() => setAdsbLayer('status')}
-              className={`lattice-tab px-3 py-1 text-xs rounded transition-all ${
-                adsbLayer === 'status'
-                  ? 'active'
-                  : ''
-              }`}
-            >
-              <Activity className="h-3 w-3 inline mr-1" />
-              Status
             </button>
           </div>
           
@@ -955,12 +944,6 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           </div>
         )}
 
-        {/* Status Layer */}
-        {adsbLayer === 'status' && (
-          <div className="absolute inset-0">
-            <ADSBStatusPanel />
-          </div>
-        )}
       </div>
     </div>
   );

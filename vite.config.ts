@@ -23,6 +23,9 @@ export default defineConfig({
           const lat = url.searchParams.get('lat');
           const lon = url.searchParams.get('lon');
           return `/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+        },
+        headers: {
+          'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }
       },
       '/api/aviation': {
@@ -41,14 +44,7 @@ export default defineConfig({
         target: 'https://opensky-network.org',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/adsb/, '/api/states/all')
-      },
-      ...(process.env.NODE_ENV !== 'production' && process.env.ADSB_PROXY_URL ? {
-        '/adsb-proxy': {
-          target: process.env.ADSB_PROXY_URL || 'http://localhost:3001',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
-        },
-      } : {})
+      }
     }
   }
 })

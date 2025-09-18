@@ -22,16 +22,14 @@ const log = (level, message, data = null) => {
   if (data) console.log(JSON.stringify(data, null, 2));
 };
 
-// Check RTL-SDR hardware status
+// 🔧 Check RTL-SDR hardware status
 const checkRTLSDR = () => {
   return new Promise((resolve) => {
-    // Først sjekk om dongelen finnes på USB-bussen
     exec("lsusb | grep -i 'Realtek' || true", (err, stdout) => {
       if (!stdout || stdout.trim() === '') {
         return resolve({ status: 'OFFLINE', detail: 'No RTL-SDR dongle detected on USB bus' });
       }
 
-      // Hvis funnet, kjør en rask test
       exec('rtl_test -t -d 0', { timeout: 2000 }, (error, stdout, stderr) => {
         if (stdout.includes('No supported devices')) {
           return resolve({ status: 'OFFLINE', detail: 'Device not supported or disconnected' });
@@ -43,19 +41,6 @@ const checkRTLSDR = () => {
           return resolve({ status: 'UNKNOWN', detail: stderr || stdout });
         }
       });
-    });
-  });
-};
-
-// Check if dump1090 is running and producing data
-const checkDump1090Status = () => {
-  return new Promise((resolve) => {
-    exec('pgrep dump1090', { timeout: 1000 }, (error, stdout) => {
-      if (error || !stdout.trim()) {
-        resolve({ running: false, detail: 'dump1090 process not running' });
-      } else {
-        resolve({ running: true, detail: 'dump1090 process active', pid: stdout.trim() });
-      }
     });
   });
 };
@@ -126,7 +111,7 @@ app.get('/aircraft.json', (req, res) => {
   }
 });
 
-// Health check endpoint
+// 🔧 Health check endpoint
 app.get('/health', async (req, res) => {
   try {
     const fileChecks = checkFileSystem();
@@ -157,6 +142,7 @@ app.get('/health', async (req, res) => {
       timestamp: Date.now()
     });
   } catch (err) {
+    log('error', 'Health check failed', { error: err.message });
     res.json({
       status: 'OFFLINE',
       rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
@@ -176,7 +162,6 @@ app.get('/diagnostics', (req, res) => {
       nodeVersion: process.version,
       uptime: process.uptime()
     },
-    rtlsdr: "busy (in use by dump1090)",
     dump1090: null,
     filesystem: null,
     network: {
@@ -186,12 +171,10 @@ app.get('/diagnostics', (req, res) => {
   };
 
   try {
-    // Check dump1090 by looking for aircraft.json
     diagnostics.dump1090 = fs.existsSync(AIRCRAFT_JSON_PATH)
       ? "running"
       : "not found";
 
-    // File system checks
     diagnostics.filesystem = {
       aircraftJsonExists: fs.existsSync(AIRCRAFT_JSON_PATH),
       runDirExists: fs.existsSync(path.dirname(AIRCRAFT_JSON_PATH))

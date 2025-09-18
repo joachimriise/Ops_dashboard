@@ -23,35 +23,25 @@ const log = (level, message, data = null) => {
 };
 
 // Enhanced RTL-SDR hardware detection
+// Check RTL-SDR hardware status
 const checkRTLSDR = () => {
   return new Promise((resolve) => {
-    // First check USB bus for RTL-SDR devices
-    exec('lsusb | grep -E "(RTL|Realtek|0bda:2838|0bda:2832)"', { timeout: 2000 }, (lsusbError, lsusbStdout) => {
-      if (lsusbError || !lsusbStdout.trim()) {
-        // No RTL-SDR device found on USB bus
-        resolve({ status: 'OFFLINE', detail: 'RTL-SDR dongle not detected on USB bus' });
-        return;
+    // Først sjekk om dongelen finnes på USB-bussen
+    exec("lsusb | grep -i 'Realtek' || true", (err, stdout) => {
+      if (!stdout || stdout.trim() === '') {
+        return resolve({ status: 'OFFLINE', detail: 'No RTL-SDR dongle detected on USB bus' });
       }
-      
-      // Device found on USB, now test if it responds
-      exec('rtl_eeprom -d 0', { timeout: 3000 }, (eepromError, eepromStdout, eepromStderr) => {
-        if (eepromStderr.includes('usb_claim_interface error -6')) {
-          resolve({ status: 'BUSY', detail: 'RTL-SDR detected and in use by dump1090' });
-        } else if (eepromError && eepromStderr.includes('No supported devices found')) {
-          resolve({ status: 'OFFLINE', detail: 'RTL-SDR device not responding' });
-        } else if (eepromStdout.includes('Found') || eepromStdout.includes('EEPROM')) {
-          resolve({ status: 'ONLINE', detail: 'RTL-SDR detected and available' });
+
+      // Hvis funnet, kjør en rask test
+      exec('rtl_test -t -d 0', { timeout: 2000 }, (error, stdout, stderr) => {
+        if (stdout.includes('No supported devices')) {
+          return resolve({ status: 'OFFLINE', detail: 'Device not supported or disconnected' });
+        } else if (stderr.includes('usb_claim_interface error -6')) {
+          return resolve({ status: 'BUSY', detail: 'Device present but in use by dump1090' });
+        } else if (stdout.includes('Found 1 device')) {
+          return resolve({ status: 'ONLINE', detail: 'Device detected and available' });
         } else {
-          // Fallback to rtl_test with short timeout
-          exec('rtl_test -t -d 0', { timeout: 2000 }, (testError, testStdout, testStderr) => {
-            if (testStderr.includes('usb_claim_interface error -6')) {
-              resolve({ status: 'BUSY', detail: 'RTL-SDR detected and in use by dump1090' });
-            } else if (testStdout.includes('Found 1 device')) {
-              resolve({ status: 'ONLINE', detail: 'RTL-SDR detected and available' });
-            } else {
-              resolve({ status: 'OFFLINE', detail: 'RTL-SDR device not responding properly' });
-            }
-          });
+          return resolve({ status: 'UNKNOWN', detail: stderr || stdout });
         }
       });
     });

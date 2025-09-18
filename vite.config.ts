@@ -11,7 +11,7 @@ export default defineConfig({
       '/adsb-proxy': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/adsb-proxy/, '')
+        rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
       },
       '/api/weather': {
         target: 'https://api.met.no',

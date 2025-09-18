@@ -23,27 +23,21 @@ const log = (level, message, data = null) => {
 };
 
 // Check RTL-SDR hardware status
-const checkRTLSDR = () => {
+function checkRTLSDR() {
   return new Promise((resolve) => {
-    exec('rtl_test -t', { timeout: 5000 }, (error, stdout, stderr) => {
-      if (error) {
-        if (stderr.includes('usb_claim_interface error -6') || 
-            stderr.includes('Device or resource busy')) {
-          resolve({ status: 'BUSY', detail: 'Device in use by dump1090' });
-        } else if (stderr.includes('No supported devices found') ||
-                   stderr.includes('usb_open error')) {
-          resolve({ status: 'OFFLINE', detail: 'No RTL-SDR device found' });
-        } else {
-          resolve({ status: 'ERROR', detail: stderr || error.message });
-        }
-      } else if (stdout.includes('Found 1 device') || stdout.includes('Found') && stdout.includes('device')) {
-        resolve({ status: 'AVAILABLE', detail: 'RTL-SDR device detected' });
+    exec('rtl_test -t', { timeout: 3000 }, (error, stdout, stderr) => {
+      if (stdout.includes('No supported devices')) {
+        resolve({ status: 'OFFLINE', detail: 'No device detected' });
+      } else if (stderr.includes('usb_claim_interface error -6')) {
+        resolve({ status: 'BUSY', detail: 'Device present (in use by dump1090)' });
+      } else if (stdout.includes('Found 1 device')) {
+        resolve({ status: 'ONLINE', detail: 'Device detected and available' });
       } else {
-        resolve({ status: 'UNKNOWN', detail: stdout || stderr || 'Unknown response' });
+        resolve({ status: 'UNKNOWN', detail: stderr || stdout });
       }
     });
   });
-};
+}
 
 // Check file system status
 const checkFileSystem = () => {
@@ -115,50 +109,25 @@ app.get('/aircraft.json', (req, res) => {
 app.get('/health', async (req, res) => {
   try {
     const fileChecks = checkFileSystem();
-    const rtlsdrCheck = await checkRTLSDR();
+    const rtlsdr = await checkRTLSDR();
 
-    // Check if data is recent (updated within last 30 seconds)
     const isDataRecent = fileChecks.aircraftJsonExists && 
                         fileChecks.aircraftJsonStats &&
                         (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
 
-    // Determine overall system status
     let overallStatus = 'OFFLINE';
-    let reason = '';
-
-    if (!fileChecks.aircraftJsonExists) {
-      reason = 'No aircraft.json file found';
-    } else if (!fileChecks.aircraftJsonReadable) {
-      reason = 'Cannot read aircraft.json file';
-    } else if (!isDataRecent) {
-      const fileAgeSec = Math.round((Date.now() - fileChecks.aircraftJsonStats.mtimeMs) / 1000);
-      reason = `Data is stale (${fileAgeSec}s old)`;
-    } else if (rtlsdrCheck.status === 'OFFLINE') {
-      reason = 'RTL-SDR device not found';
-    } else if (rtlsdrCheck.status === 'ERROR') {
-      reason = `RTL-SDR error: ${rtlsdrCheck.detail}`;
-    } else if (rtlsdrCheck.status === 'BUSY' || rtlsdrCheck.status === 'AVAILABLE') {
-      // Both BUSY (in use by dump1090) and AVAILABLE are good states
+    if (rtlsdr.status === 'OFFLINE') {
+      overallStatus = 'OFFLINE';
+    } else if (isDataRecent && (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE')) {
       overallStatus = 'ONLINE';
-    } else {
-      reason = `RTL-SDR status unknown: ${rtlsdrCheck.status}`;
     }
-
-    const aircraftCount = fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0;
-    const messageCount = fileChecks.aircraftData ? fileChecks.aircraftData.messages || 0 : 0;
-    const fileAgeSec = fileChecks.aircraftJsonStats ? 
-      Math.round((Date.now() - fileChecks.aircraftJsonStats.mtimeMs) / 1000) : null;
 
     res.json({
       status: overallStatus,
-      reason: reason || undefined,
-      messages: messageCount,
-      aircraftCount: aircraftCount,
-      fileAgeSec,
-      lastModified: fileChecks.aircraftJsonStats ? fileChecks.aircraftJsonStats.mtime.toISOString() : null,
-      rtlsdr: {
-        status: rtlsdrCheck.status,
-        detail: rtlsdrCheck.detail
+      rtl: rtlsdr,
+      file: {
+        exists: fileChecks.aircraftJsonExists,
+        recent: isDataRecent
       },
       timestamp: Date.now()
     });
@@ -166,7 +135,8 @@ app.get('/health', async (req, res) => {
     log('error', 'Health check failed', { error: err.message });
     res.json({ 
       status: 'OFFLINE', 
-      reason: `Health check error: ${err.message}`,
+      rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
+      file: { exists: false, recent: false },
       timestamp: Date.now()
     });
   }

@@ -23,20 +23,14 @@ interface Aircraft {
 
 interface HealthStatus {
   status: 'ONLINE' | 'OFFLINE';
-  reason?: string;
-  aircraftCount?: number;
-  messageCount?: number;
-  dataAge?: number;
-  lastModified?: string;
   timestamp: number;
-  rtlsdr?: {
+  rtl?: {
     status: string;
     detail: string;
   };
-  checks?: {
-    aircraftJsonExists: boolean;
-    aircraftJsonReadable: boolean;
-    alternativePaths: string[];
+  file?: {
+    exists: boolean;
+    recent: boolean;
   };
 }
 
@@ -782,10 +776,10 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div>
                     <div className="lattice-text-secondary">RTL-SDR:</div>
                     <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.rtlsdr?.status === 'BUSY' ? 'Connected (In Use)' :
-                       healthStatus.rtlsdr?.status === 'AVAILABLE' ? 'Connected (Available)' :
-                       healthStatus.rtlsdr?.status === 'OFFLINE' ? 'Not Found' :
-                       healthStatus.rtlsdr?.status === 'ERROR' ? 'Error' :
+                      {healthStatus.rtl?.status === 'BUSY' ? 'Connected (In Use)' :
+                       healthStatus.rtl?.status === 'ONLINE' ? 'Connected (Available)' :
+                       healthStatus.rtl?.status === 'OFFLINE' ? 'Not Found' :
+                       healthStatus.rtl?.status === 'ERROR' ? 'Error' :
                        'Unknown'}
                     </div>
                   </div>
@@ -826,7 +820,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 {healthStatus.reason && (
                   <div className="lattice-panel p-3 mt-3">
                     <div className="text-xs lattice-text-secondary mb-1">Details:</div>
-                    <div className="text-xs lattice-text-primary">{healthStatus.reason}</div>
+                    <div className="text-xs lattice-text-primary">{healthStatus.rtl?.detail}</div>
                   </div>
                 )}
               </div>

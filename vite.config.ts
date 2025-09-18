@@ -4,17 +4,15 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: "./",
+  base: './',
   server: {
     host: true,
     proxy: {
-      ...(process.env.NODE_ENV !== 'production' && process.env.ADSB_PROXY_URL ? {
-        '/adsb-proxy': {
-          target: process.env.ADSB_PROXY_URL || 'http://localhost:3001',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
-        },
-      } : {}),
+      '/adsb-proxy': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/adsb-proxy/, '')
+      },
       '/api/weather': {
         target: 'https://api.met.no',
         changeOrigin: true,
@@ -46,5 +44,9 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/adsb/, '/api/states/all')
       }
     }
+  },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true
   }
 })

@@ -1,57 +1,50 @@
 import React from 'react';
 
-export default function ADSBStatusPanel() {
-  const [health, setHealth] = React.useState<any>(null);
-  const [aircraft, setAircraft] = React.useState<any>(null);
-  const [error, setError] = React.useState<string | null>(null);
+export default function ADSBDiagPanel() {
+  const [logs, setLogs] = React.useState<string[]>([]);
 
-  // fetch health
-  const fetchHealth = async () => {
-    try {
-      const res = await fetch('/adsb-proxy/health');
-      const data = await res.json();
-      setHealth(data);
-    } catch (err: any) {
-      setError(`Health fetch error: ${err.message}`);
-    }
+  const addLog = (url: string, response: any, error?: string) => {
+    const time = new Date().toLocaleTimeString();
+    const entry = error
+      ? `[${time}] GET ${url} ❌ ${error}`
+      : `[${time}] GET ${url} ✅ ${JSON.stringify(response).substring(0,200)}...`;
+    setLogs(prev => [entry, ...prev].slice(0,20)); // bare 20 siste
   };
 
-  // fetch aircraft
-  const fetchAircraft = async () => {
+  const fetchAndLog = async (url: string) => {
     try {
-      const res = await fetch('/adsb-proxy/aircraft.json');
-      const data = await res.json();
-      setAircraft(data);
+      const res = await fetch(url);
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        addLog(url, data);
+      } catch {
+        addLog(url, text, 'Invalid JSON');
+      }
     } catch (err: any) {
-      setError(`Aircraft fetch error: ${err.message}`);
+      addLog(url, null, err.message);
     }
   };
 
   React.useEffect(() => {
-    fetchHealth();
-    fetchAircraft();
+    // hent første gang
+    fetchAndLog('/adsb-proxy/health');
+    fetchAndLog('/adsb-proxy/aircraft.json');
+    // repeter hvert 10. sekund
+    const interval = setInterval(() => {
+      fetchAndLog('/adsb-proxy/health');
+      fetchAndLog('/adsb-proxy/aircraft.json');
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="lattice-panel p-4 space-y-4">
-      <h2 className="font-bold lattice-text-primary">ADS-B Diagnostics</h2>
-
-      {error && (
-        <div className="text-red-400 text-sm">{error}</div>
-      )}
-
-      <div>
-        <h3 className="font-semibold lattice-status-primary mb-1">/health</h3>
-        <pre className="text-xs bg-black/40 p-2 rounded overflow-x-auto">
-          {health ? JSON.stringify(health, null, 2) : 'Loading...'}
-        </pre>
-      </div>
-
-      <div>
-        <h3 className="font-semibold lattice-status-primary mb-1">/aircraft.json</h3>
-        <pre className="text-xs bg-black/40 p-2 rounded overflow-x-auto">
-          {aircraft ? JSON.stringify(aircraft, null, 2) : 'Loading...'}
-        </pre>
+    <div className="lattice-panel p-4">
+      <h2 className="font-bold lattice-text-primary mb-3">ADS-B Diagnostics Log</h2>
+      <div className="text-xs lattice-text-mono space-y-1 max-h-96 overflow-y-auto bg-black/40 p-2 rounded">
+        {logs.map((line, idx) => (
+          <div key={idx}>{line}</div>
+        ))}
       </div>
     </div>
   );

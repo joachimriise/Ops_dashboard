@@ -11,8 +11,8 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Path to the dump1090-mutability aircraft data
-const AIRCRAFT_JSON_PATH = '/run/dump1090-mutability/aircraft.json';
+// Path to the dump1090 aircraft data
+const AIRCRAFT_JSON_PATH = '/run/dump1090/aircraft.json';
 
 // Enhanced logging function
 const log = (level, message, data = null) => {
@@ -47,15 +47,15 @@ const checkRTLSDR = () => {
   });
 };
 
-// Check dump1090 process status
-const checkDump1090 = () => {
+// Check dump1090 service status
+const checkDump1090Service = () => {
   return new Promise((resolve) => {
-    exec('pgrep -f dump1090', (error, stdout, stderr) => {
-      if (stdout.trim()) {
-        const pid = stdout.trim().split('\n')[0];
-        resolve({ running: true, detail: `Running with PID ${pid}`, pid });
+    exec('systemctl is-active dump1090.service', (error, stdout, stderr) => {
+      const status = stdout.trim();
+      if (status === 'active') {
+        resolve({ active: true, detail: 'dump1090.service is active' });
       } else {
-        resolve({ running: false, detail: 'Not running' });
+        resolve({ active: false, detail: `dump1090.service is ${status}` });
       }
     });
   });
@@ -132,25 +132,31 @@ app.get('/health', async (req, res) => {
   try {
     const fileChecks = checkFileSystem();
     const rtlsdr = await checkRTLSDR();
+    const dump1090Service = await checkDump1090Service();
 
     // Check if aircraft.json is fresh (< 30 seconds old)
     const isRecent = fileChecks.aircraftJsonExists &&
                      fileChecks.aircraftJsonStats &&
                      (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
 
-    // Determine overall status
+    // Determine overall status based on RTL-SDR, dump1090 service, and data freshness
     let overallStatus = 'OFFLINE';
-    if (rtlsdr.status === 'OFFLINE') {
+    
+    if (rtlsdr.status === 'OFFLINE' || !dump1090Service.active) {
+      // No hardware or service not running
       overallStatus = 'OFFLINE';
-    } else if (rtlsdr.status === 'BUSY' && !isRecent) {
+    } else if (rtlsdr.status === 'BUSY' && dump1090Service.active && !isRecent) {
+      // Hardware detected, service running, but no fresh data
       overallStatus = 'BUSY';
-    } else if ((rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE') && isRecent) {
+    } else if ((rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE') && dump1090Service.active && isRecent) {
+      // Hardware working, service active, and receiving fresh data
       overallStatus = 'ONLINE';
     }
 
     res.json({
       status: overallStatus,
       rtl: rtlsdr,
+      service: dump1090Service,
       file: {
         exists: fileChecks.aircraftJsonExists,
         recent: isRecent
@@ -162,6 +168,7 @@ app.get('/health', async (req, res) => {
     res.json({
       status: 'OFFLINE',
       rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
+      service: { active: false, detail: 'Service check failed' },
       file: { exists: false, recent: false },
       timestamp: Date.now()
     });
@@ -178,7 +185,8 @@ app.get('/diagnostics', async (req, res) => {
       nodeVersion: process.version,
       uptime: process.uptime()
     },
-    dump1090: await checkDump1090(),
+    dump1090Service: await checkDump1090Service(),
+    rtlsdr: await checkRTLSDR(),
     filesystem: null,
     network: {
       port: PORT,

@@ -27,6 +27,10 @@ interface HealthStatus {
     status: 'ONLINE' | 'BUSY' | 'OFFLINE' | 'UNKNOWN';
     detail: string;
   };
+  service?: {
+    active: boolean;
+    detail: string;
+  };
   file?: {
     exists: boolean;
     recent: boolean;
@@ -181,6 +185,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         setHealthStatus({
           status: 'OFFLINE',
           rtl: { status: 'OFFLINE', detail: `Health check failed (${response.status})` },
+          service: { active: false, detail: 'Service check failed' },
           file: { exists: false, recent: false },
           timestamp: Date.now(),
         });
@@ -193,6 +198,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         setHealthStatus({
           status: 'OFFLINE',
           rtl: { status: 'OFFLINE', detail: 'Proxy returned HTML instead of JSON' },
+          service: { active: false, detail: 'Service check failed' },
           file: { exists: false, recent: false },
           timestamp: Date.now(),
         });
@@ -206,6 +212,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         setHealthStatus({
           status: 'OFFLINE',
           rtl: { status: 'OFFLINE', detail: 'Invalid JSON from proxy' },
+          service: { active: false, detail: 'Service check failed' },
           file: { exists: false, recent: false },
           timestamp: Date.now(),
         });
@@ -222,6 +229,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             ? 'No proxy server detected in this environment'
             : `Network error: ${error.message}`
         },
+        service: { active: false, detail: 'Service check failed' },
         file: { exists: false, recent: false },
         timestamp: Date.now(),
       });
@@ -282,12 +290,12 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         data.aircraft = [];
       }
 
-      // Transform dump1090-mutability data to our Aircraft interface
+      // Transform dump1090 data to our Aircraft interface
       const aircraftData: Aircraft[] = data.aircraft.map((ac: any) => {
         const refLat = gpsData?.latitude || 59.9139;
         const refLon = gpsData?.longitude || 10.7522;
         
-        // dump1090-mutability JSON format
+        // dump1090 JSON format
         const aircraft: Aircraft = {
           icao: ac.hex || 'UNKNOWN',
           callsign: ac.flight?.trim() || 'UNKNOWN',
@@ -346,11 +354,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     };
   }, [fetchHealthStatus]);
 
-  // Fetch aircraft data when health status changes to ONLINE or BUSY
+  // Fetch aircraft data when health status changes to ONLINE
   React.useEffect(() => {
     let aircraftInterval: NodeJS.Timeout;
     
-    if (healthStatus.status === 'ONLINE' || healthStatus.status === 'BUSY') {
+    if (healthStatus.status === 'ONLINE') {
       fetchADSBData(); // Initial fetch
       aircraftInterval = setInterval(fetchADSBData, 2000);
     } else {
@@ -402,6 +410,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       case 'BUSY': return 'bg-amber-400';
       case 'OFFLINE': return 'bg-red-400';
       default: return 'bg-gray-400';
+    }
+  };
+
+  const getStatusLabel = (status: string, rtlStatus?: string) => {
+    switch (status) {
+      case 'ONLINE': return 'Online';
+      case 'BUSY': return rtlStatus === 'BUSY' ? 'Connected (In Use)' : 'Busy';
+      case 'OFFLINE': return 'Offline';
+      default: return 'Unknown';
     }
   };
 
@@ -467,7 +484,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           <div className="flex items-center space-x-1 ml-auto px-2 py-1 lattice-panel rounded">
             <span className="text-xs lattice-text-secondary flex items-center">
               <Radar className={`h-3 w-3 mr-1 ${getStatusColor(healthStatus.status)}`} />
-              ADS-B: {healthStatus.status}
+              ADS-B: {getStatusLabel(healthStatus.status, healthStatus.rtl?.status)}
             </span>
           </div>
         </div>
@@ -493,12 +510,18 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                       {healthStatus.rtl?.detail || 'RTL-SDR dongle not found'}
                     </p>
                     
+                    {healthStatus.service && !healthStatus.service.active && (
+                      <p className="text-base lattice-text-primary mb-3">
+                        Service: {healthStatus.service.detail}
+                      </p>
+                    )}
+                    
                     <p>Please check:</p>
                     <ul className="list-disc list-inside text-left space-y-1 mt-2">
                       <li>RTL-SDR dongle is plugged in</li>
                       <li>USB connection is secure</li>
-                      <li>Device drivers are installed</li>
-                      <li>No other software is using the device</li>
+                      <li>dump1090.service is configured</li>
+                      <li>systemd/udev rules are active</li>
                     </ul>
                   </div>
                   <div className="mt-4 text-xs lattice-text-muted">
@@ -609,8 +632,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 <p className="text-xs mt-2 lattice-text-secondary">
                   {healthStatus.rtl?.detail || 'RTL-SDR dongle not found'}
                 </p>
+                {healthStatus.service && !healthStatus.service.active && (
+                  <p className="text-xs mt-1 lattice-text-secondary">
+                    Service: {healthStatus.service.detail}
+                  </p>
+                )}
                 <p className="text-xs mt-1 lattice-text-secondary">
-                  Connect RTL-SDR hardware to begin aircraft tracking
+                  Connect RTL-SDR hardware and ensure dump1090.service is configured
                 </p>
               </div>
             ) : isLoading ? (
@@ -815,7 +843,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div>
                     <div className="lattice-text-secondary">Overall Status:</div>
                     <div className={`font-semibold ${getStatusColor(healthStatus.status)}`}>
-                      {healthStatus.status}
+                      {getStatusLabel(healthStatus.status, healthStatus.rtl?.status)}
                     </div>
                   </div>
                   <div>
@@ -825,15 +853,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     </div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Data File:</div>
-                    <div className={`font-semibold ${healthStatus.file?.recent ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.file?.recent ? 'Fresh Data' : 'Stale/Missing'}
+                    <div className="lattice-text-secondary">dump1090 Service:</div>
+                    <div className={`font-semibold ${healthStatus.service?.active ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.service?.active ? 'Active' : 'Inactive'}
                     </div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Data Collection:</div>
-                    <div className={`font-semibold ${healthStatus.status !== 'OFFLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.status !== 'OFFLINE' ? 'Active' : 'Suspended'}
+                    <div className="lattice-text-secondary">Data File:</div>
+                    <div className={`font-semibold ${healthStatus.file?.recent ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.file?.recent ? 'Fresh Data' : 'Stale/Missing'}
                     </div>
                   </div>
                   <div>
@@ -843,7 +871,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div>
                     <div className="lattice-text-secondary">Last Update:</div>
                     <div className="lattice-text-primary font-semibold">
-                      {healthStatus.status !== 'OFFLINE' ? lastUpdate.toLocaleTimeString() : 'N/A'}
+                      {healthStatus.status === 'ONLINE' ? lastUpdate.toLocaleTimeString() : 'N/A'}
                     </div>
                   </div>
                 </div>
@@ -853,10 +881,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="text-xs lattice-text-primary">
                     {healthStatus.rtl?.detail || 'No status information available'}
                   </div>
+                  {healthStatus.service && (
+                    <div className="text-xs lattice-text-primary mt-1">
+                      Service: {healthStatus.service.detail}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="mt-3">
-                  {healthStatus.status !== 'OFFLINE' ? (
+                  {healthStatus.status === 'ONLINE' ? (
                     <button
                       onClick={fetchADSBData}
                       disabled={isLoading}
@@ -882,6 +915,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     <div className="text-xs lattice-text-primary">
                       {healthStatus.rtl?.detail || 'RTL-SDR hardware not detected'}
                     </div>
+                    {healthStatus.service && !healthStatus.service.active && (
+                      <div className="text-xs lattice-text-primary mt-1">
+                        Service: {healthStatus.service.detail}
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -889,7 +927,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="lattice-panel border-amber-400 p-3 mt-3 bg-amber-900/30">
                     <div className="text-xs lattice-status-warning font-semibold mb-1">Hardware Status:</div>
                     <div className="text-xs lattice-text-primary">
-                      RTL-SDR detected but no recent data. Check antenna connection and dump1090 process.
+                      RTL-SDR detected but no recent data. Check antenna connection and dump1090.service.
                     </div>
                   </div>
                 )}

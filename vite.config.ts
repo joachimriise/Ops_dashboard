@@ -49,7 +49,6 @@ export default defineConfig({
           rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
         },
       } : {})
-      }
     }
   }
 })

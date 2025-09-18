@@ -448,7 +448,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               }`}
             >
               <Settings className="h-3 w-3 inline mr-1" />
-              Filters
+              Settings
             </button>
           </div>
           
@@ -689,7 +689,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             <div className="space-y-4">
               {/* Range Settings */}
               <div className="lattice-panel p-4">
-                <div className="text-sm lattice-status-primary mb-3 font-semibold">Range Filters</div>
+                <div className="text-sm lattice-status-primary mb-3 font-semibold">Filters</div>
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs lattice-text-secondary block mb-1">
@@ -764,196 +764,49 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               {/* Hardware Status */}
               <div className="lattice-panel p-4">
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
-                
-                {/* Diagnostics Button */}
-                <div className="mb-3">
-                  <button
-                    onClick={() => window.open('http://localhost/adsb-proxy/diagnostics', '_blank')}
-                    className="lattice-button text-xs px-3 py-1 flex items-center space-x-1"
-                  >
-                    <Radar className="h-3 w-3" />
-                    <span>View Diagnostics</span>
-                  </button>
-                </div>
-                
-                {/* ADS-B System Status */}
-                <div className="lattice-panel p-3 mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs lattice-text-secondary">ADS-B System</span>
-                    <span className={`text-xs font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                  <div>
+                    <div className="lattice-text-secondary">Status:</div>
+                    <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
                       {healthStatus.status}
-                    </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs lattice-text-secondary">Proxy Server</span>
-                    <span className={`text-xs font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.status === 'ONLINE' ? 'CONNECTED' : 'DISCONNECTED'}
-                    </span>
+                  <div>
+                    <div className="lattice-text-secondary">Aircraft:</div>
+                    <div className="lattice-text-primary font-semibold">{filteredAircraft.length}</div>
                   </div>
-                  {healthStatus.aircraftCount !== undefined && (
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs lattice-text-secondary">Aircraft Count</span>
-                      <span className="text-xs font-semibold lattice-text-primary">{healthStatus.aircraftCount}</span>
+                  <div>
+                    <div className="lattice-text-secondary">Last Update:</div>
+                    <div className="lattice-text-primary font-semibold">{lastUpdate.toLocaleTimeString()}</div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Hardware:</div>
+                    <div className="lattice-text-primary font-semibold">
+                      {healthStatus.status === 'ONLINE' ? 'RTL-SDR' : 'Offline'}
                     </div>
-                  )}
-                  {healthStatus.dataAge !== undefined && (
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs lattice-text-secondary">Data Age</span>
-                      <span className="text-xs font-semibold lattice-text-primary">{healthStatus.dataAge}s</span>
-                    </div>
-                  )}
-                  {healthStatus.lastModified && (
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs lattice-text-secondary">Last Modified</span>
-                      <span className="text-xs font-semibold lattice-text-primary">
-                        {new Date(healthStatus.lastModified).toLocaleTimeString()}
-                      </span>
-                    </div>
-                  )}
+                  </div>
                 </div>
                 
-                {/* Status Details */}
-                {healthStatus.reason && (
-                  <div className="lattice-panel p-3 mb-3">
-                    <div className="text-xs lattice-text-secondary mb-1">Status Details:</div>
-                    <div className="text-xs lattice-text-primary">
-                      {healthStatus.reason}
-                    </div>
-                    <div className="text-xs lattice-text-muted mt-2">
-                      Last check: {new Date(healthStatus.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                )}
-                
-                {/* File System Info */}
-                {healthStatus.checks && (
-                  <div className="lattice-panel p-3 mb-3">
-                    <div className="text-xs lattice-text-secondary mb-1">File System:</div>
-                    <div className="text-xs space-y-1">
-                      <div>Aircraft JSON: <span className={`font-semibold ${healthStatus.checks.aircraftJsonExists ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                        {healthStatus.checks.aircraftJsonExists ? 'EXISTS' : 'NOT FOUND'}
-                      </span></div>
-                      <div>Readable: <span className={`font-semibold ${healthStatus.checks.aircraftJsonReadable ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                        {healthStatus.checks.aircraftJsonReadable ? 'YES' : 'NO'}
-                      </span></div>
-                      {healthStatus.checks.alternativePaths.length > 0 && (
-                        <div>Alt Paths: <span className="lattice-status-warning font-semibold">
-                          {healthStatus.checks.alternativePaths.length} found
-                        </span></div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <button
+                  onClick={fetchADSBData}
+                  disabled={isLoading}
+                  className="lattice-button disabled:opacity-50 text-xs px-3 py-1 flex items-center space-x-1"
+                >
+                  <Radar className={`h-3 w-3 ${isLoading ? 'lattice-spin' : ''}`} />
+                  <span>{isLoading ? 'Loading...' : 'Refresh'}</span>
+                </button>
                 
                 {error && (
-                  <div className="lattice-panel border-red-400 p-2 mb-3 bg-red-900/30">
-                    <div className="text-xs lattice-status-error font-semibold mb-1">Connection Error:</div>
+                  <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
+                    <div className="text-xs lattice-status-error font-semibold mb-1">Error:</div>
                     <div className="text-xs lattice-text-primary">{error}</div>
-                    <div className="text-xs lattice-text-muted mt-2">
-                      Make sure the proxy server is running and dump1090-mutability is active
-                    </div>
                   </div>
                 )}
                 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <label className="text-xs lattice-text-secondary block mb-1">
-                      Search Radius: {searchRadius}km
-                    </label>
-                    <input
-                      type="range"
-                      min="25"
-                      max="250"
-                      step="25"
-                      value={searchRadius}
-                      onChange={(e) => setSearchRadius(parseInt(e.target.value))}
-                      className="w-full accent-cyan-400"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={fetchADSBData}
-                      disabled={isLoading}
-                      className="lattice-button disabled:opacity-50 text-xs px-3 py-1 flex items-center space-x-1"
-                    >
-                      <Radar className={`h-3 w-3 ${isLoading ? 'lattice-spin' : ''}`} />
-                      <span>{isLoading ? 'Loading...' : 'Refresh'}</span>
-                    </button>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Connection: 
-                    <span className={`font-semibold ml-1 ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {isLoading ? 'Loading...' : healthStatus.status === 'ONLINE' ? 'ADS-B Online' : 'ADS-B Offline'}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Last Update: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {lastUpdate.toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Aircraft Count: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {filteredAircraft.length}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Update Rate: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      0.5Hz (2s)
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Hardware: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {healthStatus.status === 'ONLINE' ? 'RTL-SDR + dump1090' : 'Not Available'}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Data Source: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {healthStatus.status === 'ONLINE' ? 'dump1090-mutability (local)' : 'No Server'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Statistics */}
-              <div className="lattice-panel p-4">
-                <div className="text-sm lattice-status-primary mb-3 font-semibold">Statistics</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="lattice-text-secondary">
-                    Avg Altitude: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {filteredAircraft.length > 0 
-                        ? Math.round(filteredAircraft.reduce((sum, ac) => sum + ac.altitude, 0) / filteredAircraft.length).toLocaleString()
-                        : 0}ft
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Avg Speed: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {filteredAircraft.length > 0 
-                        ? Math.round(filteredAircraft.reduce((sum, ac) => sum + ac.speed, 0) / filteredAircraft.length)
-                        : 0}kts
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Closest: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {filteredAircraft.length > 0
-                        ? `${Math.min(...filteredAircraft.map(ac => ac.distance || Infinity)).toFixed(1)}km`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="lattice-text-secondary">
-                    Highest: 
-                    <span className="lattice-text-primary font-semibold ml-1">
-                      {filteredAircraft.length > 0 
-                        ? Math.max(...filteredAircraft.map(ac => ac.altitude)).toLocaleString()
-                        : 0}ft
-                    </span>
+                {healthStatus.reason && (
+                  <div className="lattice-panel p-3 mt-3">
+                    <div className="text-xs lattice-text-secondary mb-1">Details:</div>
+                    <div className="text-xs lattice-text-primary">{healthStatus.reason}</div>
                   </div>
                 </div>
               </div>

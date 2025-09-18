@@ -322,22 +322,21 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {
     // Initial fetch
-    fetchADSBData();
     fetchHealthStatus();
 
-    // Set up health check interval (always runs)
+    // Set up health check interval (always runs to detect when hardware comes back)
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval (skip if offline to avoid hammering)
-    const aircraftInterval = setInterval(() => {
-      if (healthStatus.status !== 'OFFLINE') {
-        fetchADSBData();
-      }
-    }, 2000);
+    // Set up aircraft data interval only if system is online
+    let aircraftInterval: NodeJS.Timeout | null = null;
+    if (healthStatus.status === 'ONLINE') {
+      fetchADSBData(); // Initial fetch
+      aircraftInterval = setInterval(fetchADSBData, 2000);
+    }
 
     return () => {
-      clearInterval(aircraftInterval);
       clearInterval(healthInterval);
+      if (aircraftInterval) clearInterval(aircraftInterval);
     };
   }, [fetchADSBData, fetchHealthStatus, healthStatus.status]);
 

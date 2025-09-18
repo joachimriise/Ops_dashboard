@@ -23,14 +23,22 @@ interface Aircraft {
 
 interface HealthStatus {
   status: 'ONLINE' | 'OFFLINE';
+  detail: string;
   timestamp: number;
   rtl?: {
     status: string;
     detail: string;
   };
+  dump1090?: {
+    running: boolean;
+    detail: string;
+    pid?: string;
+  };
   file?: {
     exists: boolean;
     recent: boolean;
+    aircraftCount?: number;
+    messageCount?: number;
   };
 }
 
@@ -312,6 +320,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         // Instead of throwing, mark as offline gracefully
         setHealthStatus({
           status: 'OFFLINE',
+          detail: `Health check failed (${response.status})`,
           reason: `Health check failed (${response.status})`,
           timestamp: Date.now(),
         });
@@ -322,6 +331,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
         setHealthStatus({
           status: 'OFFLINE',
+          detail: 'Proxy returned HTML instead of JSON',
           reason: 'Proxy returned HTML instead of JSON',
           timestamp: Date.now(),
         });
@@ -335,6 +345,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       } catch {
         setHealthStatus({
           status: 'OFFLINE',
+          detail: 'Invalid JSON from proxy',
           reason: 'Invalid JSON from proxy',
           timestamp: Date.now(),
         });
@@ -344,13 +355,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
 
       setHealthStatus(healthData);
       
-      // Update hardware connection status
-      const isHardwareConnected = healthData.rtlsdr && 
-        (healthData.rtlsdr.status === 'BUSY' || healthData.rtlsdr.status === 'ONLINE');
+      // Update hardware connection status based on overall status
+      const isHardwareConnected = healthData.status === 'ONLINE' || healthData.status === 'BUSY';
       setHardwareConnected(isHardwareConnected);
     } catch (error: any) {
       setHealthStatus({
         status: 'OFFLINE',
+        detail: error.message.includes('ECONNREFUSED')
+          ? 'No proxy server detected in this environment'
+          : `Network error: ${error.message}`,
         reason: error.message.includes('ECONNREFUSED')
           ? 'No proxy server detected in this environment'
           : `Network error: ${error.message}`,
@@ -511,18 +524,34 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="flex items-center justify-center mb-4">
                     <Radar className="h-12 w-12 lattice-status-error" />
                   </div>
-                  <h3 className="text-lg font-semibold lattice-status-error mb-2">
-                    ADS-B Hardware Not Detected
+                  <h3 className="text-lg font-semibold lattice-status-error mb-4">
+                    {healthStatus.status === 'OFFLINE' ? 'ADS-B Hardware Not Detected' : 'ADS-B System Issue'}
                   </h3>
                   <div className="space-y-2 text-sm lattice-text-secondary">
-                    <p>RTL-SDR dongle is not connected or not detected.</p>
-                    <p>Please check:</p>
-                    <ul className="list-disc list-inside text-left space-y-1 mt-2">
-                      <li>RTL-SDR dongle is plugged in</li>
-                      <li>USB connection is secure</li>
-                      <li>Device drivers are installed</li>
-                      <li>No other software is using the device</li>
-                    </ul>
+                    <p className="text-base lattice-text-primary mb-3">{healthStatus.detail}</p>
+                    
+                    {healthStatus.status === 'OFFLINE' && (
+                      <>
+                        <p>Please check:</p>
+                        <ul className="list-disc list-inside text-left space-y-1 mt-2">
+                          <li>RTL-SDR dongle is plugged in</li>
+                          <li>USB connection is secure</li>
+                          <li>Device drivers are installed</li>
+                          <li>No other software is using the device</li>
+                        </ul>
+                      </>
+                    )}
+                    
+                    {healthStatus.status === 'BUSY' && (
+                      <>
+                        <p>Hardware detected but no data received:</p>
+                        <ul className="list-disc list-inside text-left space-y-1 mt-2">
+                          <li>Check antenna connection</li>
+                          <li>Verify dump1090 is running</li>
+                          <li>Check for interference</li>
+                        </ul>
+                      </>
+                    )}
                   </div>
                   <div className="mt-4 text-xs lattice-text-muted">
                     Hardware detection runs automatically every 10 seconds
@@ -849,12 +878,18 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                       ) : (
                         'Not Detected'
                       )}
+                  <div>
+                    <div className="lattice-text-secondary">dump1090:</div>
+                    <div className={`font-semibold ${healthStatus.dump1090?.running ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.dump1090?.running ? `Running (PID: ${healthStatus.dump1090.pid})` : 'Not Running'}
+                    </div>
+                  </div>
                     </div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Hardware Status:</div>
-                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {hardwareConnected ? 'Connected' : 'Disconnected'}
+                    <div className="lattice-text-secondary">Data File:</div>
+                    <div className={`font-semibold ${healthStatus.file?.recent ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.file?.recent ? 'Fresh Data' : 'Stale/Missing'}
                     </div>
                   </div>
                   <div>
@@ -865,11 +900,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   </div>
                   <div>
                     <div className="lattice-text-secondary">Messages:</div>
-                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? (healthStatus.messageCount || 0) : 'N/A'}</div>
+                    <div className="lattice-text-primary font-semibold">{healthStatus.file?.messageCount || 'N/A'}</div>
                   </div>
                   <div>
                     <div className="lattice-text-secondary">Aircraft:</div>
-                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? filteredAircraft.length : 'N/A'}</div>
+                    <div className="lattice-text-primary font-semibold">{healthStatus.file?.aircraftCount || 'N/A'}</div>
                   </div>
                   <div>
                     <div className="lattice-text-secondary">Frequency:</div>
@@ -879,6 +914,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     <div className="lattice-text-secondary">Last Update:</div>
                     <div className="lattice-text-primary font-semibold">{hardwareConnected ? lastUpdate.toLocaleTimeString() : 'N/A'}</div>
                   </div>
+                </div>
+                
+                <div className="mb-3 p-2 lattice-panel bg-gray-800/50">
+                  <div className="text-xs lattice-text-secondary mb-1">System Status:</div>
+                  <div className="text-xs lattice-text-primary">{healthStatus.detail}</div>
                 </div>
                 
                 <div className="mt-3">
@@ -902,7 +942,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   )}
                 </div>
                 
-                {!hardwareConnected && healthStatus.rtl?.detail && (
+                {!hardwareConnected && (
                   <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
                     <div className="text-xs lattice-status-error font-semibold mb-1">Hardware Status:</div>
                     <div className="text-xs lattice-text-primary">{healthStatus.rtlsdr?.detail}</div>

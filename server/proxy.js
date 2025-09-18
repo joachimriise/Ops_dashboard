@@ -22,18 +22,50 @@ const log = (level, message, data = null) => {
   if (data) console.log(JSON.stringify(data, null, 2));
 };
 
-// Check RTL-SDR hardware status
+// Enhanced RTL-SDR hardware detection
 const checkRTLSDR = () => {
   return new Promise((resolve) => {
-    exec('rtl_test -t', { timeout: 3000 }, (error, stdout, stderr) => {
-      if (stdout.includes('No supported devices')) {
-        resolve({ status: 'OFFLINE', detail: 'No device detected' });
-      } else if (stderr.includes('usb_claim_interface error -6')) {
-        resolve({ status: 'BUSY', detail: 'Device present (in use by dump1090)' });
-      } else if (stdout.includes('Found 1 device')) {
-        resolve({ status: 'ONLINE', detail: 'Device detected and available' });
+    // First check USB bus for RTL-SDR devices
+    exec('lsusb | grep -E "(RTL|Realtek|0bda:2838|0bda:2832)"', { timeout: 2000 }, (lsusbError, lsusbStdout) => {
+      if (lsusbError || !lsusbStdout.trim()) {
+        // No RTL-SDR device found on USB bus
+        resolve({ status: 'OFFLINE', detail: 'RTL-SDR dongle not detected on USB bus' });
+        return;
+      }
+      
+      // Device found on USB, now test if it responds
+      exec('rtl_eeprom -d 0', { timeout: 3000 }, (eepromError, eepromStdout, eepromStderr) => {
+        if (eepromStderr.includes('usb_claim_interface error -6')) {
+          resolve({ status: 'BUSY', detail: 'RTL-SDR detected and in use by dump1090' });
+        } else if (eepromError && eepromStderr.includes('No supported devices found')) {
+          resolve({ status: 'OFFLINE', detail: 'RTL-SDR device not responding' });
+        } else if (eepromStdout.includes('Found') || eepromStdout.includes('EEPROM')) {
+          resolve({ status: 'ONLINE', detail: 'RTL-SDR detected and available' });
+        } else {
+          // Fallback to rtl_test with short timeout
+          exec('rtl_test -t -d 0', { timeout: 2000 }, (testError, testStdout, testStderr) => {
+            if (testStderr.includes('usb_claim_interface error -6')) {
+              resolve({ status: 'BUSY', detail: 'RTL-SDR detected and in use by dump1090' });
+            } else if (testStdout.includes('Found 1 device')) {
+              resolve({ status: 'ONLINE', detail: 'RTL-SDR detected and available' });
+            } else {
+              resolve({ status: 'OFFLINE', detail: 'RTL-SDR device not responding properly' });
+            }
+          });
+        }
+      });
+    });
+  });
+};
+
+// Check if dump1090 is running and producing data
+const checkDump1090Status = () => {
+  return new Promise((resolve) => {
+    exec('pgrep dump1090', { timeout: 1000 }, (error, stdout) => {
+      if (error || !stdout.trim()) {
+        resolve({ running: false, detail: 'dump1090 process not running' });
       } else {
-        resolve({ status: 'UNKNOWN', detail: stderr || stdout });
+        resolve({ running: true, detail: 'dump1090 process active', pid: stdout.trim() });
       }
     });
   });
@@ -110,24 +142,41 @@ app.get('/health', async (req, res) => {
   try {
     const fileChecks = checkFileSystem();
     const rtlsdr = await checkRTLSDR();
+    const dump1090 = await checkDump1090Status();
 
     const isRecent = fileChecks.aircraftJsonExists &&
                      fileChecks.aircraftJsonStats &&
                      (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
 
+    // Determine overall status based on hardware and data freshness
     let overallStatus = 'OFFLINE';
+    let statusDetail = '';
+    
     if (rtlsdr.status === 'OFFLINE') {
       overallStatus = 'OFFLINE';
-    } else if (isRecent && (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE')) {
+      statusDetail = rtlsdr.detail;
+    } else if (!isRecent) {
+      overallStatus = 'BUSY';
+      statusDetail = 'RTL-SDR detected but no recent data - check antenna/dump1090';
+    } else if (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE') {
       overallStatus = 'ONLINE';
+      const aircraftCount = fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0;
+      statusDetail = `ADS-B receiver active, ${aircraftCount} aircraft tracked`;
+    } else {
+      overallStatus = 'OFFLINE';
+      statusDetail = 'Unknown hardware state';
     }
 
     res.json({
       status: overallStatus,
+      detail: statusDetail,
       rtl: rtlsdr,
+      dump1090: dump1090,
       file: {
         exists: fileChecks.aircraftJsonExists,
-        recent: isRecent
+        recent: isRecent,
+        aircraftCount: fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0,
+        messageCount: fileChecks.aircraftData ? fileChecks.aircraftData.messages : 0
       },
       timestamp: Date.now()
     });
@@ -135,7 +184,9 @@ app.get('/health', async (req, res) => {
     log('error', 'Health check failed', { error: err.message });
     res.json({
       status: 'OFFLINE',
+      detail: `Health check error: ${err.message}`,
       rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
+      dump1090: { running: false, detail: 'Health check failed' },
       file: { exists: false, recent: false },
       timestamp: Date.now()
     });

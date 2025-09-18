@@ -167,18 +167,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
 
   // Fetch live ADS-B data from local proxy
   const fetchADSBData = React.useCallback(async () => {
-    // Don't fetch aircraft data if system is known to be offline
-    if (healthStatus.status === 'OFFLINE') {
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch('/adsb-proxy/aircraft.json', {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        // Removed AbortSignal.timeout for better compatibility with older browsers
       });
 
       if (!response.ok) {
@@ -186,14 +181,19 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         throw new Error(`Proxy server error: ${response.status} - ${errorText}`);
       }
 
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      // Parse JSON regardless of content-type (dump1090 often sends text/plain)
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // Fallback: try parsing as text then JSON
         const responseText = await response.text();
-        throw new Error(`Expected JSON response, got: ${contentType}. Response: ${responseText.substring(0, 100)}`);
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error(`Failed to parse response as JSON: ${parseError.message}`);
+        }
       }
-
-      const data = await response.json();
       
       if (!data.aircraft) {
         data.aircraft = [];
@@ -215,7 +215,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           heading: ac.track || 0,
           vertical_rate: ac.baro_rate || 0, // Already in ft/min
           squawk: ac.squawk || '0000',
-          aircraft_type: ac.category || 'UNKNOWN',
+          aircraft_type: ac.category || ac.type || 'UNKNOWN',
           last_seen: new Date(),
           distance: ac.lat && ac.lon ? getDistance(refLat, refLon, ac.lat, ac.lon) : undefined,
           bearing: ac.lat && ac.lon ? getBearing(refLat, refLon, ac.lat, ac.lon) : undefined
@@ -238,24 +238,29 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     } finally {
       setIsLoading(false);
     }
-  }, [healthStatus.status, gpsData]);
+  }, [gpsData]);
 
   // Fetch health status from proxy
   const fetchHealthStatus = React.useCallback(async () => {
     try {
       const response = await fetch('/adsb-proxy/health', {
         method: 'GET',
-        signal: AbortSignal.timeout(3000)
+        // Removed AbortSignal.timeout for better compatibility with older browsers
       });
 
       if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
+        // Parse JSON regardless of content-type
+        let healthData;
+        try {
+          healthData = await response.json();
+        } catch (jsonError) {
           const responseText = await response.text();
-          throw new Error(`Expected JSON response, got: ${contentType}`);
+          try {
+            healthData = JSON.parse(responseText);
+          } catch (parseError) {
+            throw new Error(`Failed to parse health response as JSON: ${parseError.message}`);
+          }
         }
-
-        const healthData = await response.json();
         setHealthStatus(healthData);
       } else {
         const errorText = await response.text();
@@ -283,33 +288,14 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Set up health check interval (always runs)
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval (only when online)
-    let aircraftInterval: NodeJS.Timeout | null = null;
-    
-    if (healthStatus.status === 'ONLINE') {
-      aircraftInterval = setInterval(fetchADSBData, 2000);
-    }
-
-    // Update aircraft interval when health status changes
-    const updateAircraftInterval = () => {
-      if (aircraftInterval) clearInterval(aircraftInterval);
-      if (healthStatus.status === 'ONLINE') {
-        aircraftInterval = setInterval(fetchADSBData, 2000);
-      }
-    };
+    // Set up aircraft data interval (always runs, but may fail gracefully when offline)
+    const aircraftInterval = setInterval(fetchADSBData, 2000);
 
     return () => {
-      if (aircraftInterval) clearInterval(aircraftInterval);
+      clearInterval(aircraftInterval);
       clearInterval(healthInterval);
     };
-  }, [fetchADSBData, fetchHealthStatus, healthStatus.status]);
-
-  // Separate effect to handle aircraft data fetching when health status changes
-  React.useEffect(() => {
-    if (healthStatus.status === 'ONLINE') {
-      fetchADSBData();
-    }
-  }, [healthStatus.status, fetchADSBData]);
+  }, [fetchADSBData, fetchHealthStatus]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {

@@ -52,11 +52,6 @@ export default defineConfig({
         headers: {
           'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }
-      },
-      '/api/adsb': {
-        target: 'https://opensky-network.org',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/adsb/, '/api/states/all')
       }
     }
   },

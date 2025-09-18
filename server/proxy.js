@@ -20,9 +20,11 @@ app.get('/aircraft.json', (req, res) => {
   try {
     // Check if the file exists
     if (!fs.existsSync(AIRCRAFT_JSON_PATH)) {
-      return res.status(404).json({
-        error: 'Aircraft data not available',
-        message: 'dump1090-mutability data file not found'
+      return res.json({
+        aircraft: [],
+        now: Date.now() / 1000,
+        messages: 0,
+        aircraft_count: 0
       });
     }
 
@@ -36,9 +38,11 @@ app.get('/aircraft.json', (req, res) => {
     res.json(aircraftData);
   } catch (error) {
     console.error('Error reading aircraft data:', error);
-    res.status(500).json({
-      error: 'Failed to read aircraft data',
-      message: error.message
+    res.json({
+      aircraft: [],
+      now: Date.now() / 1000,
+      messages: 0,
+      aircraft_count: 0
     });
   }
 });

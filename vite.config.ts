@@ -15,7 +15,12 @@ export default defineConfig({
       '/api/weather': {
         target: 'https://api.met.no',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/weather/, '/weatherapi/locationforecast/2.0/compact'),
+        rewrite: (path) => {
+          const url = new URL(path, 'http://localhost');
+          const lat = url.searchParams.get('lat');
+          const lon = url.searchParams.get('lon');
+          return `/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+        },
         headers: {
           'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }
@@ -23,7 +28,11 @@ export default defineConfig({
       '/api/aviation': {
         target: 'https://api.met.no',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/aviation/, '/weatherapi/tafmetar/1.0/tafmetar.txt'),
+        rewrite: (path) => {
+          const url = new URL(path, 'http://localhost');
+          const icao = url.searchParams.get('icao');
+          return `/weatherapi/tafmetar/1.0/tafmetar.txt?icao=${icao}`;
+        },
         headers: {
           'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }

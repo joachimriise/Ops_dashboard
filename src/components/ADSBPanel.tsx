@@ -178,13 +178,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       if (!response.ok) {
-        throw new Error(`Proxy server error: ${response.status} ${response.statusText}`);
+        console.warn(`Proxy server returned ${response.status}, using empty data`);
       }
 
       const data = await response.json();
       
-      if (!data.aircraft || !Array.isArray(data.aircraft)) {
-        throw new Error('Invalid aircraft data format - no aircraft array found');
+      if (!data.aircraft) {
+        data.aircraft = [];
       }
 
       // Transform dump1090-mutability data to our Aircraft interface

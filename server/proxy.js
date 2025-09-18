@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // Path to the dump1090 aircraft data
-const AIRCRAFT_JSON_PATH = '/run/dump1090/aircraft.json';
+const AIRCRAFT_JSON_PATH = '/run/dump1090-mutability/aircraft.json';
 
 // Enhanced logging function
 const log = (level, message, data = null) => {
@@ -37,8 +37,13 @@ const checkRTLSDR = () => {
           return resolve({ status: 'OFFLINE', detail: 'Device not supported or disconnected' });
         } else if (stderr.includes('usb_claim_interface error -6')) {
           return resolve({ status: 'BUSY', detail: 'Device present but in use by dump1090' });
-        } else if (stdout.includes('Found 1 device')) {
-          return resolve({ status: 'ONLINE', detail: 'Device detected and available' });
+         } else if (stdout.includes('Found 1 device')) {
+         // Når dump1090 kjører kan rtl_test skrive masse, men det betyr fortsatt at dongelen er der
+        const looksBusy = stderr.includes('usb_claim_interface') || stdout.includes('Detached kernel driver');
+        return resolve({
+         status: looksBusy ? 'BUSY' : 'ONLINE',
+         detail: looksBusy ? 'Device present (in use by dump1090)' : 'Device detected and available'
+         }); 
         } else {
           return resolve({ status: 'UNKNOWN', detail: stderr || stdout });
         }

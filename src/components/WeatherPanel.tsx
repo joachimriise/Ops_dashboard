@@ -309,11 +309,8 @@ export default function WeatherPanel({
     try {
       // Use direct API call with CORS handling
       const response = await fetch(
-        `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`,
+        `/api/weather?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`,
         {
-          headers: {
-            'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
-          },
           signal: AbortSignal.timeout(10000)
         }
       );
@@ -383,12 +380,9 @@ export default function WeatherPanel({
       const forecasts: AviationForecast[] = [];
       
       try {
-        const metnoUrl = `https://api.met.no/weatherapi/tafmetar/1.0/tafmetar.txt?icao=${nearestAirport.icao}`;
+        const metnoUrl = `/api/aviation?icao=${nearestAirport.icao}`;
         
         const response = await fetch(metnoUrl, {
-          headers: {
-            'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
-          },
           signal: AbortSignal.timeout(10000)
         });
         

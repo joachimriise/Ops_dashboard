@@ -23,9 +23,6 @@ export default defineConfig({
           const lat = url.searchParams.get('lat');
           const lon = url.searchParams.get('lon');
           return `/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
-        },
-        headers: {
-          'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }
       },
       '/api/aviation': {

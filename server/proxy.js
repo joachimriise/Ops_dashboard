@@ -122,7 +122,7 @@ app.get('/health', async (req, res) => {
                      fileChecks.aircraftJsonStats &&
                      (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
 
-    // Bestem overall status
+    // Bestem overall status - må alltid være ONLINE, BUSY, eller OFFLINE
     let overallStatus = 'OFFLINE';
     if (rtlsdr.status === 'OFFLINE') {
       overallStatus = 'OFFLINE';
@@ -132,8 +132,9 @@ app.get('/health', async (req, res) => {
       overallStatus = 'ONLINE';
     }
 
+    // Garantert struktur som frontend forventer
     res.json({
-      status: overallStatus,
+      status: overallStatus, // ONLINE|BUSY|OFFLINE
       rtl: rtlsdr,
       file: {
         exists: fileChecks.aircraftJsonExists,
@@ -144,7 +145,7 @@ app.get('/health', async (req, res) => {
   } catch (err) {
     log('error', 'Health check failed', { error: err.message });
     res.json({
-      status: 'OFFLINE',
+      status: 'OFFLINE', // Alltid OFFLINE ved feil
       rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
       file: { exists: false, recent: false },
       timestamp: Date.now()

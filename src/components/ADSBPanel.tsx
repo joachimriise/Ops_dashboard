@@ -269,44 +269,45 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         // Removed AbortSignal.timeout for better compatibility with older browsers
       });
 
-      if (response.ok) {
-        // Read response text first, then parse as JSON
-        const responseText = await response.text();
-        
-        // Check if we got HTML instead of expected JSON
-        if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
-          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy' (port 3001).`);
-        }
-        
-        let healthData;
-        try {
-          healthData = JSON.parse(responseText);
-        } catch (parseError) {
-          throw new Error(`Failed to parse health response as JSON: ${parseError.message}. Response: ${responseText.substring(0, 200)}`);
-        }
-        console.log('Health check response:', healthData);
-        setHealthStatus(healthData);
-      } else {
-        const errorText = await response.text();
-        
-        // Check if we got HTML instead of expected JSON
-        if (errorText.trim().startsWith('<!doctype') || errorText.trim().startsWith('<html')) {
-          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy' (port 3001).`);
-        }
-        
-        console.error('Health check HTTP error:', response.status, errorText);
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        // Instead of throwing, mark as offline gracefully
         setHealthStatus({
           status: 'OFFLINE',
-          reason: `Health check failed: ${response.status} - ${errorText}`,
-          timestamp: Date.now()
+          reason: `Health check failed (${response.status})`,
+          timestamp: Date.now(),
         });
+        return;
       }
+
+      if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
+        setHealthStatus({
+          status: 'OFFLINE',
+          reason: 'Proxy returned HTML instead of JSON',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      let healthData;
+      try {
+        healthData = JSON.parse(responseText);
+      } catch {
+        setHealthStatus({
+          status: 'OFFLINE',
+          reason: 'Invalid JSON from proxy',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      setHealthStatus(healthData);
     } catch (error: any) {
-      console.error('Health check network error:', error);
       setHealthStatus({
         status: 'OFFLINE',
-        reason: `Health check error: ${error.message}`,
-        timestamp: Date.now()
+        reason: `Network error: ${error.message}`,
+        timestamp: Date.now(),
       });
     }
   }, []);

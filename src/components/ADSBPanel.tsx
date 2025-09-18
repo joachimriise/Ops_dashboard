@@ -22,24 +22,16 @@ interface Aircraft {
 }
 
 interface HealthStatus {
-  status: 'ONLINE' | 'OFFLINE';
-  detail: string;
-  timestamp: number;
+  status: 'ONLINE' | 'BUSY' | 'OFFLINE';
   rtl?: {
-    status: string;
+    status: 'ONLINE' | 'BUSY' | 'OFFLINE' | 'UNKNOWN';
     detail: string;
-  };
-  dump1090?: {
-    running: boolean;
-    detail: string;
-    pid?: string;
   };
   file?: {
     exists: boolean;
     recent: boolean;
-    aircraftCount?: number;
-    messageCount?: number;
   };
+  timestamp: number;
 }
 
 interface ADSBPanelProps {
@@ -177,12 +169,69 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     status: 'OFFLINE',
     timestamp: Date.now()
   });
-  const [hardwareConnected, setHardwareConnected] = React.useState(false);
+
+  // Fetch health status from proxy
+  const fetchHealthStatus = React.useCallback(async () => {
+    try {
+      const response = await fetch('/adsb-proxy/health', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        setHealthStatus({
+          status: 'OFFLINE',
+          rtl: { status: 'OFFLINE', detail: `Health check failed (${response.status})` },
+          file: { exists: false, recent: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const responseText = await response.text();
+
+      if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
+        setHealthStatus({
+          status: 'OFFLINE',
+          rtl: { status: 'OFFLINE', detail: 'Proxy returned HTML instead of JSON' },
+          file: { exists: false, recent: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      let healthData;
+      try {
+        healthData = JSON.parse(responseText);
+      } catch {
+        setHealthStatus({
+          status: 'OFFLINE',
+          rtl: { status: 'OFFLINE', detail: 'Invalid JSON from proxy' },
+          file: { exists: false, recent: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      setHealthStatus(healthData);
+    } catch (error: any) {
+      setHealthStatus({
+        status: 'OFFLINE',
+        rtl: { 
+          status: 'OFFLINE', 
+          detail: error.message.includes('ECONNREFUSED')
+            ? 'No proxy server detected in this environment'
+            : `Network error: ${error.message}`
+        },
+        file: { exists: false, recent: false },
+        timestamp: Date.now(),
+      });
+    }
+  }, []);
 
   // Fetch live ADS-B data from local proxy
   const fetchADSBData = React.useCallback(async () => {
-    // Only fetch data if hardware is connected
-    if (!hardwareConnected) {
+    // Only fetch data if hardware is online
+    if (healthStatus.status === 'OFFLINE') {
       setAircraft([]);
       return;
     }
@@ -191,9 +240,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      const response = await fetch('http://localhost/adsb-proxy/aircraft.json', {
+      const response = await fetch('/adsb-proxy/aircraft.json', {
         method: 'GET',
-        // Removed AbortSignal.timeout for better compatibility with older browsers
       });
 
       if (!response.ok) {
@@ -227,40 +275,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       if (data.error) {
         console.warn('ADS-B hardware/dump1090 not available:', data.error);
         setAircraft([]);
-        setHealthStatus({
-          status: 'OFFLINE',
-          reason: data.error,
-          timestamp: Date.now()
-        });
         return;
       }
       
       if (!data.aircraft) {
         data.aircraft = [];
-      }
-      
-      // Update health status based on data quality and message count
-      const now = Date.now() / 1000;
-      const dataAge = data.now ? Math.abs(now - data.now) : 0;
-      const messageCount = data.messages || 0;
-      
-      // Check multiple indicators for RTL-SDR health
-      if (dataAge > 30 || messageCount === 0) {
-        // Data is too old or no messages received - RTL-SDR likely disconnected
-        setHealthStatus({
-          status: 'OFFLINE',
-          reason: messageCount === 0 ? 'No messages received - RTL-SDR disconnected' : `Stale data (${dataAge.toFixed(0)}s old)`,
-          timestamp: Date.now()
-        });
-      } else {
-        // Data is fresh and messages are being received
-        setHealthStatus({
-          status: 'ONLINE',
-          aircraftCount: data.aircraft.length,
-          messageCount: messageCount,
-          dataAge: dataAge,
-          timestamp: Date.now()
-        });
       }
 
       // Transform dump1090-mutability data to our Aircraft interface
@@ -304,76 +323,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     } finally {
       setIsLoading(false);
     }
-  }, [gpsData]);
+  }, [gpsData, healthStatus.status]);
 
-  // Fetch health status from proxy
-  const fetchHealthStatus = React.useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost/adsb-proxy/health', {
-        method: 'GET',
-        // Removed AbortSignal.timeout for better compatibility with older browsers
-      });
-
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        // Instead of throwing, mark as offline gracefully
-        setHealthStatus({
-          status: 'OFFLINE',
-          detail: `Health check failed (${response.status})`,
-          reason: `Health check failed (${response.status})`,
-          timestamp: Date.now(),
-        });
-        setHardwareConnected(false);
-        return;
-      }
-
-      if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
-        setHealthStatus({
-          status: 'OFFLINE',
-          detail: 'Proxy returned HTML instead of JSON',
-          reason: 'Proxy returned HTML instead of JSON',
-          timestamp: Date.now(),
-        });
-        setHardwareConnected(false);
-        return;
-      }
-
-      let healthData;
-      try {
-        healthData = JSON.parse(responseText);
-      } catch {
-        setHealthStatus({
-          status: 'OFFLINE',
-          detail: 'Invalid JSON from proxy',
-          reason: 'Invalid JSON from proxy',
-          timestamp: Date.now(),
-        });
-        setHardwareConnected(false);
-        return;
-      }
-
-      setHealthStatus(healthData);
-      
-      // Update hardware connection status based on overall status
-      const isHardwareConnected = healthData.status === 'ONLINE' || healthData.status === 'BUSY';
-      setHardwareConnected(isHardwareConnected);
-    } catch (error: any) {
-      setHealthStatus({
-        status: 'OFFLINE',
-        detail: error.message.includes('ECONNREFUSED')
-          ? 'No proxy server detected in this environment'
-          : `Network error: ${error.message}`,
-        reason: error.message.includes('ECONNREFUSED')
-          ? 'No proxy server detected in this environment'
-          : `Network error: ${error.message}`,
-        timestamp: Date.now(),
-      });
-      setHardwareConnected(false);
-    }
-  }, []);
-
-  // Fetch ADS-B data on component mount and set up interval
+  // Fetch data on component mount and location change
   React.useEffect(() => {
     // Center map on GPS if available
     if (gpsData?.connected && gpsData.latitude && gpsData.longitude) {
@@ -381,7 +333,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     }
   }, [gpsData]);
 
-  // Fetch ADS-B data on component mount and set up interval
+  // Fetch health status on component mount and set up interval
   React.useEffect(() => {
     // Initial fetch
     fetchHealthStatus();
@@ -389,35 +341,26 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Set up health check interval (always runs to detect hardware)
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval (only when hardware is connected)
-    let aircraftInterval: NodeJS.Timeout;
-    
-    const startDataFetching = () => {
-      if (hardwareConnected) {
-        fetchADSBData(); // Initial fetch
-        aircraftInterval = setInterval(fetchADSBData, 2000);
-      }
-    };
-    
-    // Start data fetching if hardware is already connected
-    startDataFetching();
-    
-    // Watch for hardware connection changes
-    const hardwareCheckInterval = setInterval(() => {
-      if (hardwareConnected && !aircraftInterval) {
-        startDataFetching();
-      } else if (!hardwareConnected && aircraftInterval) {
-        clearInterval(aircraftInterval);
-        aircraftInterval = undefined;
-      }
-    }, 1000);
-
     return () => {
       clearInterval(healthInterval);
-      clearInterval(hardwareCheckInterval);
+    };
+  }, [fetchHealthStatus]);
+
+  // Fetch aircraft data when health status changes to ONLINE or BUSY
+  React.useEffect(() => {
+    let aircraftInterval: NodeJS.Timeout;
+    
+    if (healthStatus.status === 'ONLINE' || healthStatus.status === 'BUSY') {
+      fetchADSBData(); // Initial fetch
+      aircraftInterval = setInterval(fetchADSBData, 2000);
+    } else {
+      setAircraft([]); // Clear aircraft when offline
+    }
+
+    return () => {
       if (aircraftInterval) clearInterval(aircraftInterval);
     };
-  }, [fetchADSBData, fetchHealthStatus, hardwareConnected]);
+  }, [fetchADSBData, healthStatus.status]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {
@@ -444,6 +387,24 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     return '→';
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ONLINE': return 'lattice-status-good';
+      case 'BUSY': return 'lattice-status-warning';
+      case 'OFFLINE': return 'lattice-status-error';
+      default: return 'lattice-text-secondary';
+    }
+  };
+
+  const getStatusDot = (status: string) => {
+    switch (status) {
+      case 'ONLINE': return 'bg-green-400';
+      case 'BUSY': return 'bg-amber-400';
+      case 'OFFLINE': return 'bg-red-400';
+      default: return 'bg-gray-400';
+    }
+  };
+
   return (
     <div className="lattice-panel flex flex-col h-full">
       {/* Main Header */}
@@ -456,7 +417,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             <span className="text-sm font-semibold lattice-text-primary">ADS-B Surveillance</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${healthStatus.status === 'ONLINE' ? 'bg-green-400' : 'bg-red-400'}`} />
+            <div className={`w-2 h-2 rounded-full ${getStatusDot(healthStatus.status)}`} />
             <span className="text-xs lattice-text-secondary">
               {filteredAircraft.length} aircraft
             </span>
@@ -505,7 +466,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           
           <div className="flex items-center space-x-1 ml-auto px-2 py-1 lattice-panel rounded">
             <span className="text-xs lattice-text-secondary flex items-center">
-              <Radar className={`h-3 w-3 mr-1 ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`} />
+              <Radar className={`h-3 w-3 mr-1 ${getStatusColor(healthStatus.status)}`} />
               ADS-B: {healthStatus.status}
             </span>
           </div>
@@ -518,40 +479,27 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         {adsbLayer === 'map' && (
           <div className="absolute inset-0">
             {/* Hardware Not Detected Overlay */}
-            {!hardwareConnected && (
+            {healthStatus.status === 'OFFLINE' && (
               <div className="absolute inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
                 <div className="lattice-panel-elevated p-8 max-w-md w-full mx-4 text-center">
                   <div className="flex items-center justify-center mb-4">
                     <Radar className="h-12 w-12 lattice-status-error" />
                   </div>
                   <h3 className="text-lg font-semibold lattice-status-error mb-4">
-                    {healthStatus.status === 'OFFLINE' ? 'ADS-B Hardware Not Detected' : 'ADS-B System Issue'}
+                    ADS-B Hardware Not Detected
                   </h3>
                   <div className="space-y-2 text-sm lattice-text-secondary">
-                    <p className="text-base lattice-text-primary mb-3">{healthStatus.detail}</p>
+                    <p className="text-base lattice-text-primary mb-3">
+                      {healthStatus.rtl?.detail || 'RTL-SDR dongle not found'}
+                    </p>
                     
-                    {healthStatus.status === 'OFFLINE' && (
-                      <>
-                        <p>Please check:</p>
-                        <ul className="list-disc list-inside text-left space-y-1 mt-2">
-                          <li>RTL-SDR dongle is plugged in</li>
-                          <li>USB connection is secure</li>
-                          <li>Device drivers are installed</li>
-                          <li>No other software is using the device</li>
-                        </ul>
-                      </>
-                    )}
-                    
-                    {healthStatus.status === 'BUSY' && (
-                      <>
-                        <p>Hardware detected but no data received:</p>
-                        <ul className="list-disc list-inside text-left space-y-1 mt-2">
-                          <li>Check antenna connection</li>
-                          <li>Verify dump1090 is running</li>
-                          <li>Check for interference</li>
-                        </ul>
-                      </>
-                    )}
+                    <p>Please check:</p>
+                    <ul className="list-disc list-inside text-left space-y-1 mt-2">
+                      <li>RTL-SDR dongle is plugged in</li>
+                      <li>USB connection is secure</li>
+                      <li>Device drivers are installed</li>
+                      <li>No other software is using the device</li>
+                    </ul>
                   </div>
                   <div className="mt-4 text-xs lattice-text-muted">
                     Hardware detection runs automatically every 10 seconds
@@ -654,7 +602,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         {/* Aircraft Layer */}
         {adsbLayer === 'aircraft' && (
           <div className="absolute inset-0 p-4 overflow-y-auto lattice-scrollbar">
-            {!hardwareConnected ? (
+            {healthStatus.status === 'OFFLINE' ? (
               <div className="text-center lattice-text-muted py-8">
                 <Radar className="h-8 w-8 mx-auto mb-2 lattice-status-error" />
                 <p className="lattice-status-error">ADS-B Hardware Not Detected</p>
@@ -865,25 +813,15 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
                 <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                   <div>
-                    <div className="lattice-text-secondary">Status:</div>
-                    <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                    <div className="lattice-text-secondary">Overall Status:</div>
+                    <div className={`font-semibold ${getStatusColor(healthStatus.status)}`}>
                       {healthStatus.status}
                     </div>
                   </div>
                   <div>
                     <div className="lattice-text-secondary">RTL-SDR:</div>
-                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {hardwareConnected ? (
-                        healthStatus.rtlsdr?.status === 'BUSY' ? 'Connected (In Use)' : 'Connected (Available)'
-                      ) : (
-                        'Not Detected'
-                      )}
-                  <div>
-                    <div className="lattice-text-secondary">dump1090:</div>
-                    <div className={`font-semibold ${healthStatus.dump1090?.running ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.dump1090?.running ? `Running (PID: ${healthStatus.dump1090.pid})` : 'Not Running'}
-                    </div>
-                  </div>
+                    <div className={`font-semibold ${getStatusColor(healthStatus.rtl?.status || 'OFFLINE')}`}>
+                      {healthStatus.rtl?.status || 'OFFLINE'}
                     </div>
                   </div>
                   <div>
@@ -894,35 +832,31 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   </div>
                   <div>
                     <div className="lattice-text-secondary">Data Collection:</div>
-                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {hardwareConnected ? 'Active' : 'Suspended'}
+                    <div className={`font-semibold ${healthStatus.status !== 'OFFLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.status !== 'OFFLINE' ? 'Active' : 'Suspended'}
                     </div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Messages:</div>
-                    <div className="lattice-text-primary font-semibold">{healthStatus.file?.messageCount || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="lattice-text-secondary">Aircraft:</div>
-                    <div className="lattice-text-primary font-semibold">{healthStatus.file?.aircraftCount || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="lattice-text-secondary">Frequency:</div>
-                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? '1090 MHz' : 'N/A'}</div>
+                    <div className="lattice-text-secondary">Aircraft Count:</div>
+                    <div className="lattice-text-primary font-semibold">{filteredAircraft.length}</div>
                   </div>
                   <div>
                     <div className="lattice-text-secondary">Last Update:</div>
-                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? lastUpdate.toLocaleTimeString() : 'N/A'}</div>
+                    <div className="lattice-text-primary font-semibold">
+                      {healthStatus.status !== 'OFFLINE' ? lastUpdate.toLocaleTimeString() : 'N/A'}
+                    </div>
                   </div>
                 </div>
                 
                 <div className="mb-3 p-2 lattice-panel bg-gray-800/50">
                   <div className="text-xs lattice-text-secondary mb-1">System Status:</div>
-                  <div className="text-xs lattice-text-primary">{healthStatus.detail}</div>
+                  <div className="text-xs lattice-text-primary">
+                    {healthStatus.rtl?.detail || 'No status information available'}
+                  </div>
                 </div>
                 
                 <div className="mt-3">
-                  {hardwareConnected ? (
+                  {healthStatus.status !== 'OFFLINE' ? (
                     <button
                       onClick={fetchADSBData}
                       disabled={isLoading}
@@ -942,14 +876,25 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   )}
                 </div>
                 
-                {!hardwareConnected && (
+                {healthStatus.status === 'OFFLINE' && (
                   <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
                     <div className="text-xs lattice-status-error font-semibold mb-1">Hardware Status:</div>
-                    <div className="text-xs lattice-text-primary">{healthStatus.rtlsdr?.detail}</div>
+                    <div className="text-xs lattice-text-primary">
+                      {healthStatus.rtl?.detail || 'RTL-SDR hardware not detected'}
+                    </div>
                   </div>
                 )}
                 
-                {hardwareConnected && error && (
+                {healthStatus.status === 'BUSY' && (
+                  <div className="lattice-panel border-amber-400 p-3 mt-3 bg-amber-900/30">
+                    <div className="text-xs lattice-status-warning font-semibold mb-1">Hardware Status:</div>
+                    <div className="text-xs lattice-text-primary">
+                      RTL-SDR detected but no recent data. Check antenna connection and dump1090 process.
+                    </div>
+                  </div>
+                )}
+                
+                {error && (
                   <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
                     <div className="text-xs lattice-status-error font-semibold mb-1">Data Error:</div>
                     <div className="text-xs lattice-text-primary">{error}</div>

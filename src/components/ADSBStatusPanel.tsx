@@ -1,46 +1,51 @@
 import React from 'react';
+import { CheckCircle, XCircle, AlertCircle, RefreshCw, FileText, Radar } from 'lucide-react';
 
-export default function ADSBDiagPanel() {
-  const [health, setHealth] = React.useState<any>(null);
-  const [aircraft, setAircraft] = React.useState<any>(null);
-  const [logs, setLogs] = React.useState<string[]>([]);
+interface HealthStatus {
+  status: 'ONLINE' | 'BUSY' | 'OFFLINE' | 'UNKNOWN';
+  rtl?: { status: string; detail: string };
+  service?: { active: boolean; detail: string };
+  file?: { exists: boolean; recent: boolean };
+  timestamp: number;
+}
 
-  const addLog = (msg: string) => {
-    const time = new Date().toLocaleTimeString();
-    setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 20));
-  };
+interface AircraftData {
+  aircraft: any[];
+  now: number;
+  messages: number;
+}
+
+export default function ADSBStatusPanel() {
+  const [health, setHealth] = React.useState<HealthStatus | null>(null);
+  const [aircraft, setAircraft] = React.useState<AircraftData | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = React.useState<Date>(new Date());
 
   const fetchHealth = async () => {
-    const url = '/adsb-proxy/health';
     try {
-      const res = await fetch(url);
-      const text = await res.text();
-      try {
-        const data = JSON.parse(text);
-        setHealth(data);
-        addLog(`✅ ${url} -> status=${data.status}, rtl=${data.rtl?.status}`);
-      } catch {
-        addLog(`❌ ${url} -> invalid JSON: ${text.substring(0,100)}...`);
-      }
+      const res = await fetch('/adsb-proxy/health');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setHealth(data);
+      setError(null);
+      setLastUpdate(new Date());
     } catch (err: any) {
-      addLog(`❌ ${url} -> ${err.message}`);
+      setError(`Health fetch error: ${err.message}`);
+      setHealth(null);
     }
   };
 
   const fetchAircraft = async () => {
-    const url = '/adsb-proxy/aircraft.json';
     try {
-      const res = await fetch(url);
-      const text = await res.text();
-      try {
-        const data = JSON.parse(text);
-        setAircraft(data);
-        addLog(`✅ ${url} -> messages=${data.messages}, aircraft=${data.aircraft?.length || 0}`);
-      } catch {
-        addLog(`❌ ${url} -> invalid JSON: ${text.substring(0,100)}...`);
-      }
+      const res = await fetch('/adsb-proxy/aircraft.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAircraft(data);
+      setError(null);
+      setLastUpdate(new Date());
     } catch (err: any) {
-      addLog(`❌ ${url} -> ${err.message}`);
+      setError(`Aircraft fetch error: ${err.message}`);
+      setAircraft(null);
     }
   };
 
@@ -54,62 +59,82 @@ export default function ADSBDiagPanel() {
     return () => clearInterval(interval);
   }, []);
 
+  const getStatusIcon = (status?: string) => {
+    switch (status) {
+      case 'ONLINE': return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'BUSY': return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+      case 'OFFLINE': return <XCircle className="h-5 w-5 text-red-500" />;
+      default: return <AlertCircle className="h-5 w-5 text-gray-400" />;
+    }
+  };
+
   return (
     <div className="lattice-panel p-4 space-y-4">
-      <h2 className="font-bold lattice-text-primary">ADS-B Diagnostics</h2>
+      <h2 className="font-bold lattice-text-primary">ADS-B Status</h2>
 
-      {/* Status summary */}
-      <div className="space-y-1 text-sm">
-        <div>
-          <span className="lattice-text-secondary">Dongle status:</span>{' '}
-          <span className="font-semibold">
-            {health?.rtl?.status || 'UNKNOWN'}
-          </span>
+      {error && (
+        <div className="text-red-400 text-sm">{error}</div>
+      )}
+
+      {/* Hardware status */}
+      <div className="space-y-2">
+        <div className="flex items-center space-x-2">
+          <Radar className="h-5 w-5 text-blue-500" />
+          <span className="font-semibold">Dongle status:</span>
+          {getStatusIcon(health?.rtl?.status)}
+          <span>{health?.rtl?.status || 'UNKNOWN'}</span>
         </div>
-        <div>
-          <span className="lattice-text-secondary">dump1090 service:</span>{' '}
-          <span className="font-semibold">
-            {health?.service?.active ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-        <div>
-          <span className="lattice-text-secondary">Aircraft count:</span>{' '}
-          <span className="font-semibold">
-            {aircraft?.aircraft?.length || 0}
-          </span>
-        </div>
-        <div>
-          <span className="lattice-text-secondary">Messages:</span>{' '}
-          <span className="font-semibold">
-            {aircraft?.messages || 0}
-          </span>
+        <div className="flex items-center space-x-2">
+          {health?.service?.active ? (
+            <CheckCircle className="h-5 w-5 text-green-500" />
+          ) : (
+            <XCircle className="h-5 w-5 text-red-500" />
+          )}
+          <span className="font-semibold">dump1090:</span>
+          <span>{health?.service?.active ? 'Active' : 'Inactive'}</span>
         </div>
       </div>
 
-      {/* Raw JSON */}
+      {/* Aircraft status */}
+      <div className="space-y-2">
+        <div className="flex items-center space-x-2">
+          <FileText className="h-5 w-5 text-blue-500" />
+          <span className="font-semibold">Aircraft.json:</span>
+          <span>{aircraft ? 'Accessible' : 'No data'}</span>
+        </div>
+        {aircraft && (
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>Aircraft count: {aircraft.aircraft?.length || 0}</div>
+            <div>Messages: {aircraft.messages}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Raw data */}
       <div>
-        <h3 className="font-semibold lattice-status-primary mb-1">/health raw</h3>
+        <h3 className="font-semibold text-blue-400">Raw /health</h3>
         <pre className="text-xs bg-black/40 p-2 rounded overflow-x-auto">
-          {health ? JSON.stringify(health, null, 2) : 'No data yet'}
+          {health ? JSON.stringify(health, null, 2) : 'No data'}
         </pre>
       </div>
 
       <div>
-        <h3 className="font-semibold lattice-status-primary mb-1">/aircraft.json raw</h3>
+        <h3 className="font-semibold text-blue-400">Raw /aircraft.json</h3>
         <pre className="text-xs bg-black/40 p-2 rounded overflow-x-auto">
-          {aircraft ? JSON.stringify(aircraft, null, 2) : 'No data yet'}
+          {aircraft ? JSON.stringify(aircraft, null, 2) : 'No data'}
         </pre>
       </div>
 
-      {/* Logs */}
-      <div>
-        <h3 className="font-semibold lattice-status-primary mb-1">Logs</h3>
-        <div className="text-xs lattice-text-mono space-y-1 max-h-48 overflow-y-auto bg-black/40 p-2 rounded">
-          {logs.map((line, idx) => (
-            <div key={idx}>{line}</div>
-          ))}
-        </div>
+      <div className="text-xs text-gray-400">
+        Last update: {lastUpdate.toLocaleTimeString()}
       </div>
+
+      <button
+        onClick={() => { fetchHealth(); fetchAircraft(); }}
+        className="lattice-button text-xs px-3 py-1 flex items-center space-x-1"
+      >
+        <RefreshCw className="h-3 w-3" /> <span>Refresh</span>
+      </button>
     </div>
   );
 }

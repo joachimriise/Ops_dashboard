@@ -138,7 +138,9 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
   } else {
     // Default commercial aircraft symbol
     iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M12 2L14 8L22 10L14 12L12 22L10 12L2 10L10 8L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
+      reason: error.message.includes('ECONNREFUSED') 
+        ? 'No proxy server detected in this environment'
+        : `Network error: ${error.message}`,
       <circle cx="12" cy="12" r="1.5" fill="#000"/>
     </svg>`;
   }
@@ -254,7 +256,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       setLastUpdate(new Date());
     } catch (error: any) {
       console.error('Error fetching aircraft data:', error);
-      setError(error.message);
+      setError(error.message.includes('ECONNREFUSED') 
+        ? 'No proxy server available in this environment'
+        : error.message);
       setAircraft([]);
     } finally {
       setIsLoading(false);

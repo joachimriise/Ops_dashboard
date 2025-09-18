@@ -8,11 +8,13 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      '/adsb-proxy': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
-      },
+      ...(process.env.NODE_ENV !== 'production' && process.env.ADSB_PROXY_URL ? {
+        '/adsb-proxy': {
+          target: process.env.ADSB_PROXY_URL || 'http://localhost:3001',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/adsb-proxy/, ''),
+        },
+      } : {}),
       '/api/weather': {
         target: 'https://api.met.no',
         changeOrigin: true,

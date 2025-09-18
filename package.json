@@ -9,7 +9,8 @@
     "build:pi": "vite build --mode production",
     "preview:pi": "vite preview --host 0.0.0.0 --port 3000",
     "proxy": "node server/proxy.js",
-    "dev:full": "concurrently \"npm run proxy\" \"npm run dev\"",
+    "dev:full": "concurrently \"npm run proxy\" \"ADSB_PROXY_URL=http://localhost:3001 npm run dev\"",
+    "dev:pi": "ADSB_PROXY_URL=http://localhost:3001 vite",
     "lint": "eslint .",
     "preview": "vite preview"
   },

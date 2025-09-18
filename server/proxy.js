@@ -128,6 +128,44 @@ app.get('/aircraft.json', (req, res) => {
 });
 
 // Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const fileChecks = checkFileSystem();
+    const rtlsdr = await checkRTLSDR();
+
+    // Sjekk om aircraft.json er fersk (< 30 sekunder gammel)
+    const isRecent = fileChecks.aircraftJsonExists &&
+                     fileChecks.aircraftJsonStats &&
+                     (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
+
+    // Bestem overall status
+    let overallStatus = 'OFFLINE';
+    if (rtlsdr.status === 'OFFLINE') {
+      overallStatus = 'OFFLINE';
+    } else if (rtlsdr.status === 'BUSY' && !isRecent) {
+      overallStatus = 'BUSY';
+    } else if ((rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE') && isRecent) {
+      overallStatus = 'ONLINE';
+    }
+
+    res.json({
+      status: overallStatus,
+      rtl: rtlsdr,
+      file: {
+        exists: fileChecks.aircraftJsonExists,
+        recent: isRecent
+      },
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    res.json({
+      status: 'OFFLINE',
+      rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
+      file: { exists: false, recent: false },
+      timestamp: Date.now()
+    });
+  }
+});
 
 // Diagnostics endpoint
 app.get('/diagnostics', (req, res) => {

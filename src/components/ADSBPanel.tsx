@@ -29,6 +29,10 @@ interface HealthStatus {
   dataAge?: number;
   lastModified?: string;
   timestamp: number;
+  rtlsdr?: {
+    status: string;
+    detail: string;
+  };
   checks?: {
     aircraftJsonExists: boolean;
     aircraftJsonReadable: boolean;
@@ -778,7 +782,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div>
                     <div className="lattice-text-secondary">RTL-SDR:</div>
                     <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.status === 'ONLINE' ? 'Connected' : 'Disconnected'}
+                      {healthStatus.rtlsdr?.status === 'BUSY' ? 'Connected (In Use)' :
+                       healthStatus.rtlsdr?.status === 'AVAILABLE' ? 'Connected (Available)' :
+                       healthStatus.rtlsdr?.status === 'OFFLINE' ? 'Not Found' :
+                       healthStatus.rtlsdr?.status === 'ERROR' ? 'Error' :
+                       'Unknown'}
                     </div>
                   </div>
                   <div>

@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
+import { exec } from 'child_process';
 
 const app = express();
 const PORT = 3001;
@@ -19,6 +20,65 @@ const log = (level, message, data = null) => {
   const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
   console.log(logMessage);
   if (data) console.log(JSON.stringify(data, null, 2));
+};
+
+// Check RTL-SDR hardware status
+const checkRTLSDR = () => {
+  return new Promise((resolve) => {
+    exec('rtl_test -t', { timeout: 5000 }, (error, stdout, stderr) => {
+      if (error) {
+        if (stderr.includes('usb_claim_interface error -6') || 
+            stderr.includes('Device or resource busy')) {
+          resolve({ status: 'BUSY', detail: 'Device in use by dump1090' });
+        } else if (stderr.includes('No supported devices found') ||
+                   stderr.includes('usb_open error')) {
+          resolve({ status: 'OFFLINE', detail: 'No RTL-SDR device found' });
+        } else {
+          resolve({ status: 'ERROR', detail: stderr || error.message });
+        }
+      } else if (stdout.includes('Found 1 device') || stdout.includes('Found') && stdout.includes('device')) {
+        resolve({ status: 'AVAILABLE', detail: 'RTL-SDR device detected' });
+      } else {
+        resolve({ status: 'UNKNOWN', detail: stdout || stderr || 'Unknown response' });
+      }
+    });
+  });
+};
+
+// Check file system status
+const checkFileSystem = () => {
+  try {
+    const aircraftJsonExists = fs.existsSync(AIRCRAFT_JSON_PATH);
+    let aircraftJsonStats = null;
+    let aircraftJsonReadable = false;
+    let aircraftData = null;
+
+    if (aircraftJsonExists) {
+      aircraftJsonStats = fs.statSync(AIRCRAFT_JSON_PATH);
+      try {
+        const data = fs.readFileSync(AIRCRAFT_JSON_PATH, 'utf8');
+        aircraftData = JSON.parse(data);
+        aircraftJsonReadable = true;
+      } catch (err) {
+        log('error', 'Error reading aircraft.json', { error: err.message });
+      }
+    }
+
+    return {
+      aircraftJsonExists,
+      aircraftJsonStats,
+      aircraftJsonReadable,
+      aircraftData
+    };
+  } catch (error) {
+    return {
+      aircraftJsonExists: false,
+      aircraftJsonStats: null,
+      aircraftJsonReadable: false,
+      aircraftData: null,
+      error: error.message
+    };
+  }
 };
 
 // Aircraft data endpoint
@@ -52,29 +112,63 @@ app.get('/aircraft.json', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   try {
-    if (!fs.existsSync(AIRCRAFT_JSON_PATH)) {
-      return res.json({ status: 'OFFLINE', reason: 'No aircraft.json' });
+    const fileChecks = checkFileSystem();
+    const rtlsdrCheck = await checkRTLSDR();
+
+    // Check if data is recent (updated within last 30 seconds)
+    const isDataRecent = fileChecks.aircraftJsonExists && 
+                        fileChecks.aircraftJsonStats &&
+                        (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
+
+    // Determine overall system status
+    let overallStatus = 'OFFLINE';
+    let reason = '';
+
+    if (!fileChecks.aircraftJsonExists) {
+      reason = 'No aircraft.json file found';
+    } else if (!fileChecks.aircraftJsonReadable) {
+      reason = 'Cannot read aircraft.json file';
+    } else if (!isDataRecent) {
+      const fileAgeSec = Math.round((Date.now() - fileChecks.aircraftJsonStats.mtimeMs) / 1000);
+      reason = `Data is stale (${fileAgeSec}s old)`;
+    } else if (rtlsdrCheck.status === 'OFFLINE') {
+      reason = 'RTL-SDR device not found';
+    } else if (rtlsdrCheck.status === 'ERROR') {
+      reason = `RTL-SDR error: ${rtlsdrCheck.detail}`;
+    } else if (rtlsdrCheck.status === 'BUSY' || rtlsdrCheck.status === 'AVAILABLE') {
+      // Both BUSY (in use by dump1090) and AVAILABLE are good states
+      overallStatus = 'ONLINE';
+    } else {
+      reason = `RTL-SDR status unknown: ${rtlsdrCheck.status}`;
     }
 
-    const data = fs.readFileSync(AIRCRAFT_JSON_PATH, 'utf8');
-    const aircraftData = JSON.parse(data);
-
-    const fileStats = fs.statSync(AIRCRAFT_JSON_PATH);
-    const fileAgeSec = Math.round((Date.now() - fileStats.mtime.getTime()) / 1000);
+    const aircraftCount = fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0;
+    const messageCount = fileChecks.aircraftData ? fileChecks.aircraftData.messages || 0 : 0;
+    const fileAgeSec = fileChecks.aircraftJsonStats ? 
+      Math.round((Date.now() - fileChecks.aircraftJsonStats.mtimeMs) / 1000) : null;
 
     res.json({
-      status: 'ONLINE',
-      messages: aircraftData.messages || 0,
-      aircraftCount: aircraftData.aircraft ? aircraftData.aircraft.length : 0,
+      status: overallStatus,
+      reason: reason || undefined,
+      messages: messageCount,
+      aircraftCount: aircraftCount,
       fileAgeSec,
-      lastModified: fileStats.mtime.toISOString(),
+      lastModified: fileChecks.aircraftJsonStats ? fileChecks.aircraftJsonStats.mtime.toISOString() : null,
+      rtlsdr: {
+        status: rtlsdrCheck.status,
+        detail: rtlsdrCheck.detail
+      },
       timestamp: Date.now()
     });
   } catch (err) {
     log('error', 'Health check failed', { error: err.message });
-    res.json({ status: 'OFFLINE', reason: err.message });
+    res.json({ 
+      status: 'OFFLINE', 
+      reason: `Health check error: ${err.message}`,
+      timestamp: Date.now()
+    });
   }
 });
 

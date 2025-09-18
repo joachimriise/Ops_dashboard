@@ -128,60 +128,6 @@ app.get('/aircraft.json', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', async (req, res) => {
-  try {
-    const fileChecks = checkFileSystem();
-    const rtlsdr = await checkRTLSDR();
-    const dump1090 = await checkDump1090Status();
-
-    const isRecent = fileChecks.aircraftJsonExists &&
-                     fileChecks.aircraftJsonStats &&
-                     (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
-
-    // Determine overall status based on hardware and data freshness
-    let overallStatus = 'OFFLINE';
-    let statusDetail = '';
-    
-    if (rtlsdr.status === 'OFFLINE') {
-      overallStatus = 'OFFLINE';
-      statusDetail = rtlsdr.detail;
-    } else if (!isRecent) {
-      overallStatus = 'BUSY';
-      statusDetail = 'RTL-SDR detected but no recent data - check antenna/dump1090';
-    } else if (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE') {
-      overallStatus = 'ONLINE';
-      const aircraftCount = fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0;
-      statusDetail = `ADS-B receiver active, ${aircraftCount} aircraft tracked`;
-    } else {
-      overallStatus = 'OFFLINE';
-      statusDetail = 'Unknown hardware state';
-    }
-
-    res.json({
-      status: overallStatus,
-      detail: statusDetail,
-      rtl: rtlsdr,
-      dump1090: dump1090,
-      file: {
-        exists: fileChecks.aircraftJsonExists,
-        recent: isRecent,
-        aircraftCount: fileChecks.aircraftData ? fileChecks.aircraftData.aircraft.length : 0,
-        messageCount: fileChecks.aircraftData ? fileChecks.aircraftData.messages : 0
-      },
-      timestamp: Date.now()
-    });
-  } catch (err) {
-    log('error', 'Health check failed', { error: err.message });
-    res.json({
-      status: 'OFFLINE',
-      detail: `Health check error: ${err.message}`,
-      rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
-      dump1090: { running: false, detail: 'Health check failed' },
-      file: { exists: false, recent: false },
-      timestamp: Date.now()
-    });
-  }
-});
 
 // Diagnostics endpoint
 app.get('/diagnostics', (req, res) => {

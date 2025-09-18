@@ -138,9 +138,7 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
   } else {
     // Default commercial aircraft symbol
     iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      reason: error.message.includes('ECONNREFUSED') 
-        ? 'No proxy server detected in this environment'
-        : `Network error: ${error.message}`,
+      <path d="M12 2L14 8L20 10L14 12L12 22L10 12L4 10L10 8L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
       <circle cx="12" cy="12" r="1.5" fill="#000"/>
     </svg>`;
   }
@@ -316,6 +314,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         timestamp: Date.now(),
       });
     }
+  }, []);
 
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {

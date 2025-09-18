@@ -261,9 +261,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             throw new Error(`Failed to parse health response as JSON: ${parseError.message}`);
           }
         }
+        console.log('Health check response:', healthData);
         setHealthStatus(healthData);
       } else {
         const errorText = await response.text();
+        console.error('Health check HTTP error:', response.status, errorText);
         setHealthStatus({
           status: 'OFFLINE',
           reason: `Health check failed: ${response.status} - ${errorText}`,
@@ -271,6 +273,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         });
       }
     } catch (error: any) {
+      console.error('Health check network error:', error);
       setHealthStatus({
         status: 'OFFLINE',
         reason: `Health check error: ${error.message}`,
@@ -694,6 +697,17 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               <div className="lattice-panel p-4">
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
                 
+                {/* Diagnostics Button */}
+                <div className="mb-3">
+                  <button
+                    onClick={() => window.open('/adsb-proxy/diagnostics', '_blank')}
+                    className="lattice-button text-xs px-3 py-1 flex items-center space-x-1"
+                  >
+                    <Radar className="h-3 w-3" />
+                    <span>View Diagnostics</span>
+                  </button>
+                </div>
+                
                 {/* ADS-B System Status */}
                 <div className="lattice-panel p-3 mb-3">
                   <div className="flex items-center justify-between mb-2">
@@ -720,6 +734,14 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                       <span className="text-xs font-semibold lattice-text-primary">{healthStatus.dataAge}s</span>
                     </div>
                   )}
+                  {healthStatus.lastModified && (
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs lattice-text-secondary">Last Modified</span>
+                      <span className="text-xs font-semibold lattice-text-primary">
+                        {new Date(healthStatus.lastModified).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Status Details */}
@@ -731,6 +753,26 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     </div>
                     <div className="text-xs lattice-text-muted mt-2">
                       Last check: {new Date(healthStatus.timestamp).toLocaleTimeString()}
+                    </div>
+                  </div>
+                )}
+                
+                {/* File System Info */}
+                {healthStatus.checks && (
+                  <div className="lattice-panel p-3 mb-3">
+                    <div className="text-xs lattice-text-secondary mb-1">File System:</div>
+                    <div className="text-xs space-y-1">
+                      <div>Aircraft JSON: <span className={`font-semibold ${healthStatus.checks.aircraftJsonExists ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                        {healthStatus.checks.aircraftJsonExists ? 'EXISTS' : 'NOT FOUND'}
+                      </span></div>
+                      <div>Readable: <span className={`font-semibold ${healthStatus.checks.aircraftJsonReadable ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                        {healthStatus.checks.aircraftJsonReadable ? 'YES' : 'NO'}
+                      </span></div>
+                      {healthStatus.checks.alternativePaths.length > 0 && (
+                        <div>Alt Paths: <span className="lattice-status-warning font-semibold">
+                          {healthStatus.checks.alternativePaths.length} found
+                        </span></div>
+                      )}
                     </div>
                   </div>
                 )}

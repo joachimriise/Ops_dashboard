@@ -169,9 +169,16 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     status: 'OFFLINE',
     timestamp: Date.now()
   });
+  const [hardwareConnected, setHardwareConnected] = React.useState(false);
 
   // Fetch live ADS-B data from local proxy
   const fetchADSBData = React.useCallback(async () => {
+    // Only fetch data if hardware is connected
+    if (!hardwareConnected) {
+      setAircraft([]);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -333,6 +340,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       }
 
       setHealthStatus(healthData);
+      
+      // Update hardware connection status
+      const isHardwareConnected = healthData.rtl && 
+        (healthData.rtl.status === 'BUSY' || healthData.rtl.status === 'ONLINE');
+      setHardwareConnected(isHardwareConnected);
     } catch (error: any) {
       setHealthStatus({
         status: 'OFFLINE',
@@ -341,6 +353,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           : `Network error: ${error.message}`,
         timestamp: Date.now(),
       });
+      setHardwareConnected(false);
     }
   }, []);
 
@@ -357,18 +370,38 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Initial fetch
     fetchHealthStatus();
 
-    // Set up health check interval
+    // Set up health check interval (always runs to detect hardware)
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval (always runs to detect status changes)
-    fetchADSBData(); // Initial fetch
-    const aircraftInterval = setInterval(fetchADSBData, 2000);
+    // Set up aircraft data interval (only when hardware is connected)
+    let aircraftInterval: NodeJS.Timeout;
+    
+    const startDataFetching = () => {
+      if (hardwareConnected) {
+        fetchADSBData(); // Initial fetch
+        aircraftInterval = setInterval(fetchADSBData, 2000);
+      }
+    };
+    
+    // Start data fetching if hardware is already connected
+    startDataFetching();
+    
+    // Watch for hardware connection changes
+    const hardwareCheckInterval = setInterval(() => {
+      if (hardwareConnected && !aircraftInterval) {
+        startDataFetching();
+      } else if (!hardwareConnected && aircraftInterval) {
+        clearInterval(aircraftInterval);
+        aircraftInterval = undefined;
+      }
+    }, 1000);
 
     return () => {
       clearInterval(healthInterval);
-      clearInterval(aircraftInterval);
+      clearInterval(hardwareCheckInterval);
+      if (aircraftInterval) clearInterval(aircraftInterval);
     };
-  }, [fetchADSBData, fetchHealthStatus]);
+  }, [fetchADSBData, fetchHealthStatus, hardwareConnected]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {
@@ -468,6 +501,33 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         {/* Map Layer */}
         {adsbLayer === 'map' && (
           <div className="absolute inset-0">
+            {/* Hardware Not Detected Overlay */}
+            {!hardwareConnected && (
+              <div className="absolute inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="lattice-panel-elevated p-8 max-w-md w-full mx-4 text-center">
+                  <div className="flex items-center justify-center mb-4">
+                    <Radar className="h-12 w-12 lattice-status-error" />
+                  </div>
+                  <h3 className="text-lg font-semibold lattice-status-error mb-2">
+                    ADS-B Hardware Not Detected
+                  </h3>
+                  <div className="space-y-2 text-sm lattice-text-secondary">
+                    <p>RTL-SDR dongle is not connected or not detected.</p>
+                    <p>Please check:</p>
+                    <ul className="list-disc list-inside text-left space-y-1 mt-2">
+                      <li>RTL-SDR dongle is plugged in</li>
+                      <li>USB connection is secure</li>
+                      <li>Device drivers are installed</li>
+                      <li>No other software is using the device</li>
+                    </ul>
+                  </div>
+                  <div className="mt-4 text-xs lattice-text-muted">
+                    Hardware detection runs automatically every 10 seconds
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Map Container - Full width */}
             <div className="h-full">
               <MapContainer
@@ -562,7 +622,18 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         {/* Aircraft Layer */}
         {adsbLayer === 'aircraft' && (
           <div className="absolute inset-0 p-4 overflow-y-auto lattice-scrollbar">
-            {isLoading ? (
+            {!hardwareConnected ? (
+              <div className="text-center lattice-text-muted py-8">
+                <Radar className="h-8 w-8 mx-auto mb-2 lattice-status-error" />
+                <p className="lattice-status-error">ADS-B Hardware Not Detected</p>
+                <p className="text-xs mt-2 lattice-text-secondary">
+                  {healthStatus.rtl?.detail || 'RTL-SDR dongle not found'}
+                </p>
+                <p className="text-xs mt-1 lattice-text-secondary">
+                  Connect RTL-SDR hardware to begin aircraft tracking
+                </p>
+              </div>
+            ) : isLoading ? (
               <div className="text-center lattice-text-muted py-8">
                 <Radar className="h-8 w-8 mx-auto mb-2 opacity-50 lattice-spin" />
                 <p>Loading aircraft data...</p>
@@ -580,12 +651,6 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 >
                   Retry
                 </button>
-              </div>
-            ) : healthStatus.status === 'OFFLINE' ? (
-              <div className="text-center lattice-text-muted py-8">
-                <Radar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>ADS-B system offline</p>
-                <p className="text-xs mt-2">{healthStatus.reason || 'Check RTL-SDR hardware and dump1090 service'}</p>
               </div>
             ) : filteredAircraft.length === 0 ? (
               <div className="text-center lattice-text-muted py-8">
@@ -776,10 +841,85 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div>
                     <div className="lattice-text-secondary">RTL-SDR:</div>
                     <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {healthStatus.rtl?.status === 'BUSY' ? 'Connected (In Use)' :
-                       healthStatus.rtl?.status === 'ONLINE' ? 'Connected (Available)' :
-                       healthStatus.rtl?.status === 'OFFLINE' ? 'Not Found' :
-                       healthStatus.rtl?.status === 'ERROR' ? 'Error' :
+                      {hardwareConnected ? (
+                        healthStatus.rtl?.status === 'BUSY' ? 'Connected (In Use)' : 'Connected (Available)'
+                      ) : (
+                        'Not Detected'
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Hardware Status:</div>
+                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {hardwareConnected ? 'Connected' : 'Disconnected'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Data Collection:</div>
+                    <div className={`font-semibold ${hardwareConnected ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {hardwareConnected ? 'Active' : 'Suspended'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Messages:</div>
+                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? (healthStatus.messageCount || 0) : 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Aircraft:</div>
+                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? filteredAircraft.length : 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Frequency:</div>
+                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? '1090 MHz' : 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Last Update:</div>
+                    <div className="lattice-text-primary font-semibold">{hardwareConnected ? lastUpdate.toLocaleTimeString() : 'N/A'}</div>
+                  </div>
+                </div>
+                
+                <div className="mt-3">
+                  {hardwareConnected ? (
+                    <button
+                      onClick={fetchADSBData}
+                      disabled={isLoading}
+                      className="lattice-button disabled:opacity-50 text-xs px-3 py-1 flex items-center space-x-1"
+                    >
+                      <Radar className={`h-3 w-3 ${isLoading ? 'lattice-spin' : ''}`} />
+                      <span>{isLoading ? 'Loading...' : 'Refresh Data'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={fetchHealthStatus}
+                      className="lattice-button text-xs px-3 py-1 flex items-center space-x-1"
+                    >
+                      <Radar className="h-3 w-3" />
+                      <span>Check Hardware</span>
+                    </button>
+                  )}
+                </div>
+                
+                {!hardwareConnected && healthStatus.rtl?.detail && (
+                  <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
+                    <div className="text-xs lattice-status-error font-semibold mb-1">Hardware Status:</div>
+                    <div className="text-xs lattice-text-primary">{healthStatus.rtl.detail}</div>
+                  </div>
+                )}
+                
+                {hardwareConnected && error && (
+                  <div className="lattice-panel border-red-400 p-3 mt-3 bg-red-900/30">
+                    <div className="text-xs lattice-status-error font-semibold mb-1">Data Error:</div>
+                    <div className="text-xs lattice-text-primary">{error}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
                        'Unknown'}
                     </div>
                   </div>

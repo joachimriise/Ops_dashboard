@@ -171,7 +171,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      const response = await fetch('/adsb-proxy/aircraft.json', {
+      const response = await fetch('/localhost:8080/aircraft.json', {
         method: 'GET',
         // Removed AbortSignal.timeout for better compatibility with older browsers
       });
@@ -243,7 +243,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
   // Fetch health status from proxy
   const fetchHealthStatus = React.useCallback(async () => {
     try {
-      const response = await fetch('/adsb-proxy/health', {
+      const response = await fetch('/localhost:8080/health', {
         method: 'GET',
         // Removed AbortSignal.timeout for better compatibility with older browsers
       });

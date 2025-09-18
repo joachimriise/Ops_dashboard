@@ -156,7 +156,6 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
 
 export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBPanelProps) {
   const [adsbLayer, setAdsbLayer] = React.useState<'map' | 'aircraft' | 'settings' | 'status'>('map');
-  const [adsbLayer, setAdsbLayer] = React.useState<'map' | 'aircraft' | 'settings'>('map');
   const [aircraft, setAircraft] = React.useState<Aircraft[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [lastUpdate, setLastUpdate] = React.useState<Date>(new Date());

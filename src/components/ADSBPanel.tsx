@@ -808,7 +808,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     <div className="text-xs lattice-text-secondary mb-1">Details:</div>
                     <div className="text-xs lattice-text-primary">{healthStatus.reason}</div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

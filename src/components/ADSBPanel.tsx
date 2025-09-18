@@ -177,7 +177,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      const response = await fetch('/adsb-proxy/aircraft.json', {
+      const response = await fetch('http://localhost/adsb-proxy/aircraft.json', {
         method: 'GET',
         // Removed AbortSignal.timeout for better compatibility with older browsers
       });
@@ -266,7 +266,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
   // Fetch health status from proxy
   const fetchHealthStatus = React.useCallback(async () => {
     try {
-      const response = await fetch('/adsb-proxy/health', {
+      const response = await fetch('http://localhost/adsb-proxy/health', {
         method: 'GET',
         // Removed AbortSignal.timeout for better compatibility with older browsers
       });
@@ -745,7 +745,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                 {/* Diagnostics Button */}
                 <div className="mb-3">
                   <button
-                    onClick={() => window.open('/adsb-proxy/diagnostics', '_blank')}
+                    onClick={() => window.open('http://localhost/adsb-proxy/diagnostics', '_blank')}
                     className="lattice-button text-xs px-3 py-1 flex items-center space-x-1"
                   >
                     <Radar className="h-3 w-3" />

@@ -25,6 +25,7 @@ interface HealthStatus {
   status: 'ONLINE' | 'OFFLINE';
   reason?: string;
   aircraftCount?: number;
+  messageCount?: number;
   dataAge?: number;
   lastModified?: string;
   timestamp: number;
@@ -225,22 +226,25 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         data.aircraft = [];
       }
       
-      // Update health status based on data quality
+      // Update health status based on data quality and message count
       const now = Date.now() / 1000;
       const dataAge = data.now ? Math.abs(now - data.now) : 0;
+      const messageCount = data.messages || 0;
       
-      if (dataAge > 30) {
-        // Data is too old, likely hardware disconnected
+      // Check multiple indicators for RTL-SDR health
+      if (dataAge > 30 || messageCount === 0) {
+        // Data is too old or no messages received - RTL-SDR likely disconnected
         setHealthStatus({
           status: 'OFFLINE',
-          reason: `Stale data (${dataAge.toFixed(0)}s old)`,
+          reason: messageCount === 0 ? 'No messages received - RTL-SDR disconnected' : `Stale data (${dataAge.toFixed(0)}s old)`,
           timestamp: Date.now()
         });
       } else {
-        // Data is fresh, system is online
+        // Data is fresh and messages are being received
         setHealthStatus({
           status: 'ONLINE',
           aircraftCount: data.aircraft.length,
+          messageCount: messageCount,
           dataAge: dataAge,
           timestamp: Date.now()
         });
@@ -764,7 +768,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               {/* Hardware Status */}
               <div className="lattice-panel p-4">
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
-                <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                   <div>
                     <div className="lattice-text-secondary">Status:</div>
                     <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
@@ -772,18 +776,26 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     </div>
                   </div>
                   <div>
+                    <div className="lattice-text-secondary">RTL-SDR:</div>
+                    <div className={`font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.status === 'ONLINE' ? 'Connected' : 'Disconnected'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="lattice-text-secondary">Messages:</div>
+                    <div className="lattice-text-primary font-semibold">{healthStatus.messageCount || 0}</div>
+                  </div>
+                  <div>
                     <div className="lattice-text-secondary">Aircraft:</div>
                     <div className="lattice-text-primary font-semibold">{filteredAircraft.length}</div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Last Update:</div>
-                    <div className="lattice-text-primary font-semibold">{lastUpdate.toLocaleTimeString()}</div>
+                    <div className="lattice-text-secondary">Frequency:</div>
+                    <div className="lattice-text-primary font-semibold">1090 MHz</div>
                   </div>
                   <div>
-                    <div className="lattice-text-secondary">Hardware:</div>
-                    <div className="lattice-text-primary font-semibold">
-                      {healthStatus.status === 'ONLINE' ? 'RTL-SDR' : 'Offline'}
-                    </div>
+                    <div className="lattice-text-secondary">Last Update:</div>
+                    <div className="lattice-text-primary font-semibold">{lastUpdate.toLocaleTimeString()}</div>
                   </div>
                 </div>
                 

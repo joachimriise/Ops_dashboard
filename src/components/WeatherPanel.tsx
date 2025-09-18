@@ -314,19 +314,20 @@ export default function WeatherPanel({
         }
       );
 
+      // Read response text once
+      const responseText = await response.text();
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Weather API Error: ${response.status} - ${errorText}`);
+        throw new Error(`Weather API Error: ${response.status} - ${responseText}`);
       }
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.startsWith('application/json')) {
-        const responseText = await response.text();
         throw new Error(`Expected JSON response, got: ${contentType}. Response: ${responseText.substring(0, 100)}`);
       }
 
-      const data = await response.json();
+      const data = JSON.parse(responseText);
       
       if (!data.properties || !data.properties.timeseries || data.properties.timeseries.length === 0) {
         throw new Error('Invalid weather data format');

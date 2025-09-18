@@ -8,7 +8,6 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      '/adsb-proxy': 'http://127.0.0.1:3001',
       '/api/weather': {
         target: 'https://api.met.no',
         changeOrigin: true,

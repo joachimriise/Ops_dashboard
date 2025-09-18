@@ -183,6 +183,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       if (!response.ok) {
+        if (response.status === 500) {
+          // ADS-B source unavailable (no RTL hardware or dump1090 not running)
+          console.warn('ADS-B proxy online but no data available (500). Hardware/dump1090 not available.');
+          setAircraft([]);
+          return;
+        }
+
         const errorText = await response.text();
         
         // Check if we got HTML instead of expected JSON (indicates proxy server not running)

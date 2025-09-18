@@ -22,7 +22,6 @@ const log = (level, message, data = null) => {
   if (data) console.log(JSON.stringify(data, null, 2));
 };
 
-// Enhanced RTL-SDR hardware detection
 // Check RTL-SDR hardware status
 const checkRTLSDR = () => {
   return new Promise((resolve) => {
@@ -209,7 +208,6 @@ app.get('/diagnostics', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     service: 'ADS-B Proxy Server',
-    rtlsdr: rtlsdr,
     endpoints: {
       aircraft: '/aircraft.json',
       health: '/health',

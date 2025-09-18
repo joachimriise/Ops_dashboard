@@ -181,7 +181,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         
         // Check if we got HTML instead of expected JSON (indicates proxy server not running)
         if (errorText.trim().startsWith('<!doctype') || errorText.trim().startsWith('<html')) {
-          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy' (port 3001).`);
         }
         
         throw new Error(`Proxy server error: ${response.status} - ${errorText}`);
@@ -262,7 +262,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         
         // Check if we got HTML instead of expected JSON
         if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
-          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy' (port 3001).`);
         }
         
         let healthData;
@@ -278,7 +278,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         
         // Check if we got HTML instead of expected JSON
         if (errorText.trim().startsWith('<!doctype') || errorText.trim().startsWith('<html')) {
-          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy' (port 3001).`);
         }
         
         console.error('Health check HTTP error:', response.status, errorText);

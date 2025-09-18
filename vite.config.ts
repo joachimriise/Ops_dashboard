@@ -9,7 +9,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/adsb-proxy': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:3001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/adsb-proxy/, '')
       },

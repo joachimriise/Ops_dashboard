@@ -8,7 +8,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 const app = express();
-const PORT = 8080;
+const PORT = 3001;
 
 // Enable CORS for all routes
 app.use(cors());

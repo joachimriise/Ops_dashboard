@@ -26,7 +26,13 @@ interface HealthStatus {
   reason?: string;
   aircraftCount?: number;
   dataAge?: number;
+  lastModified?: string;
   timestamp: number;
+  checks?: {
+    aircraftJsonExists: boolean;
+    aircraftJsonReadable: boolean;
+    alternativePaths: string[];
+  };
 }
 
 interface ADSBPanelProps {
@@ -138,7 +144,7 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
   }
   
   return new Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(iconSvg),
+    iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg),
     iconSize: [24, 24],
     iconAnchor: [12, 12],
     popupAnchor: [0, -12],
@@ -223,7 +229,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           heading: ac.track || 0,
           vertical_rate: ac.baro_rate || 0, // Already in ft/min
           squawk: ac.squawk || '0000',
-          aircraft_type: ac.category || ac.type || 'UNKNOWN',
+          aircraft_type: ac.category || ac.type || 'civilian',
           last_seen: new Date(),
           distance: ac.lat && ac.lon ? getDistance(refLat, refLon, ac.lat, ac.lon) : undefined,
           bearing: ac.lat && ac.lon ? getBearing(refLat, refLon, ac.lat, ac.lon) : undefined
@@ -300,6 +306,14 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
 
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {
+    // Center map on GPS if available
+    if (gpsData?.connected && gpsData.latitude && gpsData.longitude) {
+      setMapCenter([gpsData.latitude, gpsData.longitude]);
+    }
+  }, [gpsData]);
+
+  // Fetch ADS-B data on component mount and set up interval
+  React.useEffect(() => {
     // Initial fetch
     fetchADSBData();
     fetchHealthStatus();
@@ -307,14 +321,18 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Set up health check interval (always runs)
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval (always runs, but may fail gracefully when offline)
-    const aircraftInterval = setInterval(fetchADSBData, 2000);
+    // Set up aircraft data interval (skip if offline to avoid hammering)
+    const aircraftInterval = setInterval(() => {
+      if (healthStatus.status !== 'OFFLINE') {
+        fetchADSBData();
+      }
+    }, 2000);
 
     return () => {
       clearInterval(aircraftInterval);
       clearInterval(healthInterval);
     };
-  }, [fetchADSBData, fetchHealthStatus]);
+  }, [fetchADSBData, fetchHealthStatus, healthStatus.status]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {

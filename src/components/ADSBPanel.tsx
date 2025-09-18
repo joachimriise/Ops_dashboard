@@ -178,12 +178,24 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
 
       if (!response.ok) {
         const errorText = await response.text();
+        
+        // Check if we got HTML instead of expected JSON (indicates proxy server not running)
+        if (errorText.trim().startsWith('<!doctype') || errorText.trim().startsWith('<html')) {
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+        }
+        
         throw new Error(`Proxy server error: ${response.status} - ${errorText}`);
       }
 
       // Parse JSON regardless of content-type (dump1090 often sends text/plain)
       // Read response text first, then parse as JSON
       const responseText = await response.text();
+      
+      // Check if we got HTML instead of expected JSON
+      if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
+        throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+      }
+      
       let data;
       try {
         data = JSON.parse(responseText);
@@ -247,6 +259,12 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       if (response.ok) {
         // Read response text first, then parse as JSON
         const responseText = await response.text();
+        
+        // Check if we got HTML instead of expected JSON
+        if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<html')) {
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+        }
+        
         let healthData;
         try {
           healthData = JSON.parse(responseText);
@@ -257,6 +275,12 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         setHealthStatus(healthData);
       } else {
         const errorText = await response.text();
+        
+        // Check if we got HTML instead of expected JSON
+        if (errorText.trim().startsWith('<!doctype') || errorText.trim().startsWith('<html')) {
+          throw new Error(`Proxy server not running - got HTML response instead of JSON data. Please start the proxy server with 'npm run proxy'.`);
+        }
+        
         console.error('Health check HTTP error:', response.status, errorText);
         setHealthStatus({
           status: 'OFFLINE',

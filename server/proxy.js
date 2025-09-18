@@ -23,7 +23,7 @@ const log = (level, message, data = null) => {
 };
 
 // Check RTL-SDR hardware status
-function checkRTLSDR() {
+const checkRTLSDR = () => {
   return new Promise((resolve) => {
     exec('rtl_test -t', { timeout: 3000 }, (error, stdout, stderr) => {
       if (stdout.includes('No supported devices')) {
@@ -37,7 +37,7 @@ function checkRTLSDR() {
       }
     });
   });
-}
+};
 
 // Check file system status
 const checkFileSystem = () => {
@@ -111,14 +111,14 @@ app.get('/health', async (req, res) => {
     const fileChecks = checkFileSystem();
     const rtlsdr = await checkRTLSDR();
 
-    const isDataRecent = fileChecks.aircraftJsonExists && 
-                        fileChecks.aircraftJsonStats &&
-                        (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
+    const isRecent = fileChecks.aircraftJsonExists &&
+                     fileChecks.aircraftJsonStats &&
+                     (Date.now() - fileChecks.aircraftJsonStats.mtimeMs < 30000);
 
     let overallStatus = 'OFFLINE';
     if (rtlsdr.status === 'OFFLINE') {
       overallStatus = 'OFFLINE';
-    } else if (isDataRecent && (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE')) {
+    } else if (isRecent && (rtlsdr.status === 'BUSY' || rtlsdr.status === 'ONLINE')) {
       overallStatus = 'ONLINE';
     }
 
@@ -127,14 +127,14 @@ app.get('/health', async (req, res) => {
       rtl: rtlsdr,
       file: {
         exists: fileChecks.aircraftJsonExists,
-        recent: isDataRecent
+        recent: isRecent
       },
       timestamp: Date.now()
     });
   } catch (err) {
     log('error', 'Health check failed', { error: err.message });
-    res.json({ 
-      status: 'OFFLINE', 
+    res.json({
+      status: 'OFFLINE',
       rtl: { status: 'ERROR', detail: `Health check error: ${err.message}` },
       file: { exists: false, recent: false },
       timestamp: Date.now()

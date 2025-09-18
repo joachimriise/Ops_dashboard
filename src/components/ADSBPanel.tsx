@@ -314,7 +314,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           ? 'No proxy server detected in this environment'
           : `Network error: ${error.message}`,
         timestamp: Date.now(),
-  }, []);
+      });
+    }
 
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {

@@ -182,17 +182,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       }
 
       // Parse JSON regardless of content-type (dump1090 often sends text/plain)
+      // Read response text first, then parse as JSON
+      const responseText = await response.text();
       let data;
       try {
-        data = await response.json();
-      } catch (jsonError) {
-        // Fallback: try parsing as text then JSON
-        const responseText = await response.text();
-        try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          throw new Error(`Failed to parse response as JSON: ${parseError.message}`);
-        }
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Failed to parse response as JSON: ${parseError.message}. Response: ${responseText.substring(0, 200)}`);
       }
       
       if (!data.aircraft) {
@@ -249,17 +245,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       if (response.ok) {
-        // Parse JSON regardless of content-type
+        // Read response text first, then parse as JSON
+        const responseText = await response.text();
         let healthData;
         try {
-          healthData = await response.json();
-        } catch (jsonError) {
-          const responseText = await response.text();
-          try {
-            healthData = JSON.parse(responseText);
-          } catch (parseError) {
-            throw new Error(`Failed to parse health response as JSON: ${parseError.message}`);
-          }
+          healthData = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error(`Failed to parse health response as JSON: ${parseError.message}. Response: ${responseText.substring(0, 200)}`);
         }
         console.log('Health check response:', healthData);
         setHealthStatus(healthData);

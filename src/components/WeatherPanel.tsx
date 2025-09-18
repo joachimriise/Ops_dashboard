@@ -321,7 +321,7 @@ export default function WeatherPanel({
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      if (!contentType || !contentType.startsWith('application/json')) {
         const responseText = await response.text();
         throw new Error(`Expected JSON response, got: ${contentType}. Response: ${responseText.substring(0, 100)}`);
       }
@@ -396,7 +396,7 @@ export default function WeatherPanel({
         if (response.ok) {
           // Check if response is text (METAR/TAF data)
           const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
+          if (contentType && contentType.startsWith('application/json')) {
             const responseText = await response.text();
             throw new Error(`Expected text response for aviation data, got JSON: ${responseText.substring(0, 100)}`);
           }

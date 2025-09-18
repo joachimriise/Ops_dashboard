@@ -302,12 +302,11 @@ export default function WeatherPanel({
   });
 
   // Fetch weather data from Yr API
-  const fetchWeatherData = async () => {
+  const fetchWeatherData = React.useCallback(async () => {
     setIsLoadingWeather(true);
     setWeatherError(null);
 
     try {
-      // Use direct API call with CORS handling
       const response = await fetch(
         `/api/weather?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`,
         {
@@ -316,7 +315,15 @@ export default function WeatherPanel({
       );
 
       if (!response.ok) {
-        throw new Error(`Weather API Error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Weather API Error: ${response.status} - ${errorText}`);
+      }
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        throw new Error(`Expected JSON response, got: ${contentType}. Response: ${responseText.substring(0, 100)}`);
       }
 
       const data = await response.json();
@@ -355,10 +362,10 @@ export default function WeatherPanel({
     } finally {
       setIsLoadingWeather(false);
     }
-  };
+  }, [weatherLocation.lat, weatherLocation.lon]);
 
   // Fetch aviation forecast data from Yr API
-  const fetchAviationForecast = async () => {
+  const fetchAviationForecast = React.useCallback(async () => {
     setIsLoadingAviation(true);
     setAviationError(null);
 
@@ -387,7 +394,15 @@ export default function WeatherPanel({
         });
         
         if (response.ok) {
+          // Check if response is text (METAR/TAF data)
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const responseText = await response.text();
+            throw new Error(`Expected text response for aviation data, got JSON: ${responseText.substring(0, 100)}`);
+          }
+
           const rawText = await response.text();
+          
           
           // Parse the raw METAR/TAF text
           const lines = rawText.split('\n').filter(line => line.trim());
@@ -429,7 +444,8 @@ export default function WeatherPanel({
             }
           });
         } else {
-          throw new Error(`Aviation API Error: ${response.status}`);
+          const errorText = await response.text();
+          throw new Error(`Aviation API Error: ${response.status} - ${errorText}`);
         }
       } catch (error: any) {
         console.error('Aviation API error:', error);
@@ -445,13 +461,13 @@ export default function WeatherPanel({
     } finally {
       setIsLoadingAviation(false);
     }
-  };
+  }, [weatherLocation.lat, weatherLocation.lon]);
 
   // Fetch data on component mount and location change
   React.useEffect(() => {
     fetchWeatherData();
     fetchAviationForecast();
-  }, [weatherLocation]);
+  }, [fetchWeatherData, fetchAviationForecast]);
 
   return (
     <div className="lattice-panel flex flex-col h-full">

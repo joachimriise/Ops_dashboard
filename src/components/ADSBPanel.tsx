@@ -165,20 +165,32 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     timestamp: Date.now()
   });
 
-  // Fetch live ADS-B data from ADSBExchange
-  const fetchADSBData = async () => {
+  // Fetch live ADS-B data from local proxy
+  const fetchADSBData = React.useCallback(async () => {
+    // Don't fetch aircraft data if system is known to be offline
+    if (healthStatus.status === 'OFFLINE') {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Fetch from local Node proxy
       const response = await fetch('/adsb-proxy/aircraft.json', {
         method: 'GET',
         signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {
-        console.warn(`Proxy server returned ${response.status}, using empty data`);
+        const errorText = await response.text();
+        throw new Error(`Proxy server error: ${response.status} - ${errorText}`);
+      }
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        throw new Error(`Expected JSON response, got: ${contentType}. Response: ${responseText.substring(0, 100)}`);
       }
 
       const data = await response.json();
@@ -226,10 +238,10 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [healthStatus.status, gpsData]);
 
   // Fetch health status from proxy
-  const fetchHealthStatus = async () => {
+  const fetchHealthStatus = React.useCallback(async () => {
     try {
       const response = await fetch('/adsb-proxy/health', {
         method: 'GET',
@@ -237,12 +249,19 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const responseText = await response.text();
+          throw new Error(`Expected JSON response, got: ${contentType}`);
+        }
+
         const healthData = await response.json();
         setHealthStatus(healthData);
       } else {
+        const errorText = await response.text();
         setHealthStatus({
           status: 'OFFLINE',
-          reason: `Health check failed: ${response.status}`,
+          reason: `Health check failed: ${response.status} - ${errorText}`,
           timestamp: Date.now()
         });
       }
@@ -253,7 +272,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         timestamp: Date.now()
       });
     }
-  };
+  }, []);
 
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {
@@ -261,20 +280,36 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     fetchADSBData();
     fetchHealthStatus();
 
-    // Set up intervals
-    const aircraftInterval = setInterval(() => {
-      fetchADSBData();
-    }, 2000);
+    // Set up health check interval (always runs)
+    const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    const healthInterval = setInterval(() => {
-      fetchHealthStatus();
-    }, 10000);
+    // Set up aircraft data interval (only when online)
+    let aircraftInterval: NodeJS.Timeout | null = null;
+    
+    if (healthStatus.status === 'ONLINE') {
+      aircraftInterval = setInterval(fetchADSBData, 2000);
+    }
+
+    // Update aircraft interval when health status changes
+    const updateAircraftInterval = () => {
+      if (aircraftInterval) clearInterval(aircraftInterval);
+      if (healthStatus.status === 'ONLINE') {
+        aircraftInterval = setInterval(fetchADSBData, 2000);
+      }
+    };
 
     return () => {
-      clearInterval(aircraftInterval);
+      if (aircraftInterval) clearInterval(aircraftInterval);
       clearInterval(healthInterval);
     };
-  }, [gpsData]);
+  }, [fetchADSBData, fetchHealthStatus, healthStatus.status]);
+
+  // Separate effect to handle aircraft data fetching when health status changes
+  React.useEffect(() => {
+    if (healthStatus.status === 'ONLINE') {
+      fetchADSBData();
+    }
+  }, [healthStatus.status, fetchADSBData]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {

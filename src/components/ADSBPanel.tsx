@@ -21,6 +21,14 @@ interface Aircraft {
   bearing?: number;
 }
 
+interface HealthStatus {
+  status: 'ONLINE' | 'OFFLINE';
+  reason?: string;
+  aircraftCount?: number;
+  dataAge?: number;
+  timestamp: number;
+}
+
 interface ADSBPanelProps {
   onHeaderClick: () => void;
   isSelecting: boolean;
@@ -152,16 +160,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
   const [showCivilian, setShowCivilian] = useLocalStorage('adsbShowCivilian', true);
   const [searchRadius, setSearchRadius] = useLocalStorage('adsbSearchRadius', 100); // km radius for API search
   const [error, setError] = React.useState<string | null>(null);
-  const [hardwareStatus, setHardwareStatus] = React.useState<{
-    rtlsdr_connected: boolean;
-    dump1090_running: boolean;
-    last_test: Date | null;
-    test_result: string | null;
-  }>({
-    rtlsdr_connected: false,
-    dump1090_running: false,
-    last_test: null,
-    test_result: null
+  const [healthStatus, setHealthStatus] = React.useState<HealthStatus>({
+    status: 'OFFLINE',
+    timestamp: Date.now()
   });
 
   // Fetch live ADS-B data from ADSBExchange
@@ -170,55 +171,28 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     setError(null);
 
     try {
-      // Test multiple common RTL-SDR endpoints
-      const endpoints = [
-        'http://localhost:8080/data/aircraft.json',  // dump1090-mutability
-        'http://localhost:30003/data/aircraft.json', // dump1090-fa
-        'http://localhost:8080/data.json',           // alternative format
-        'http://127.0.0.1:8080/data/aircraft.json'   // explicit localhost
-      ];
-      
-      let response = null;
-      let workingEndpoint = null;
-      
-      for (const endpoint of endpoints) {
-        try {
-          response = await fetch(endpoint, {
-            method: 'GET',
-            signal: AbortSignal.timeout(3000)
-          });
-          if (response.ok) {
-            workingEndpoint = endpoint;
-            break;
-          }
-        } catch (e) {
-          continue; // Try next endpoint
-        }
+      // Fetch from local Node proxy
+      const response = await fetch('http://localhost:8080/aircraft.json', {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Proxy server error: ${response.status} ${response.statusText}`);
       }
-      
-      if (!response || !response.ok) {
-        throw new Error(`RTL-SDR Server not found. Tried ports 8080, 30003. Make sure dump1090 is running.`);
-      }
-      
-      setHardwareStatus(prev => ({
-        ...prev,
-        dump1090_running: true,
-        last_test: new Date(),
-        test_result: `Connected to ${workingEndpoint}`
-      }));
 
       const data = await response.json();
       
       if (!data.aircraft || !Array.isArray(data.aircraft)) {
-        throw new Error('Invalid RTL-SDR data format - no aircraft array found');
+        throw new Error('Invalid aircraft data format - no aircraft array found');
       }
 
-      // Transform RTL-SDR data (dump1090 format) to our Aircraft interface
+      // Transform dump1090-mutability data to our Aircraft interface
       const aircraftData: Aircraft[] = data.aircraft.map((ac: any) => {
         const refLat = gpsData?.latitude || 59.9139;
         const refLon = gpsData?.longitude || 10.7522;
         
-        // dump1090 JSON format
+        // dump1090-mutability JSON format
         const aircraft: Aircraft = {
           icao: ac.hex || 'UNKNOWN',
           callsign: ac.flight?.trim() || 'UNKNOWN',
@@ -244,92 +218,62 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       setAircraft(aircraftData);
-      setHardwareStatus(prev => ({
-        ...prev,
-        dump1090_running: true,
-        rtlsdr_connected: true
-      }));
       setLastUpdate(new Date());
     } catch (error: any) {
-      console.error('Error fetching RTL-SDR data:', error);
+      console.error('Error fetching aircraft data:', error);
       setError(error.message);
       setAircraft([]);
-      setHardwareStatus(prev => ({
-        ...prev,
-        rtlsdr_connected: false,
-        dump1090_running: false,
-        last_test: new Date(),
-        test_result: `Error: ${error.message}`
-      }));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Test RTL-SDR hardware connection
-  const testRTLSDR = async () => {
-    setHardwareStatus(prev => ({ ...prev, test_result: 'Testing...' }));
-    
+  // Fetch health status from proxy
+  const fetchHealthStatus = async () => {
     try {
-      // Test if RTL-SDR device is detected
-      const testEndpoints = [
-        { url: 'http://localhost:8080/data/aircraft.json', name: 'dump1090 (port 8080)' },
-        { url: 'http://localhost:30003/data/aircraft.json', name: 'dump1090-fa (port 30003)' },
-        { url: 'http://localhost:8080/', name: 'dump1090 web interface' }
-      ];
-      
-      let results = [];
-      
-      for (const endpoint of testEndpoints) {
-        try {
-          const response = await fetch(endpoint.url, {
-            method: 'GET',
-            signal: AbortSignal.timeout(2000)
-          });
-          
-          if (response.ok) {
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-              const data = await response.json();
-              results.push(`✓ ${endpoint.name}: JSON data (${data.aircraft?.length || 0} aircraft)`);
-            } else {
-              results.push(`✓ ${endpoint.name}: Web interface accessible`);
-            }
-          } else {
-            results.push(`✗ ${endpoint.name}: HTTP ${response.status}`);
-          }
-        } catch (e) {
-          results.push(`✗ ${endpoint.name}: Connection failed`);
-        }
+      const response = await fetch('http://localhost:8080/health', {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (response.ok) {
+        const healthData = await response.json();
+        setHealthStatus(healthData);
+      } else {
+        setHealthStatus({
+          status: 'OFFLINE',
+          reason: `Health check failed: ${response.status}`,
+          timestamp: Date.now()
+        });
       }
-      
-      setHardwareStatus(prev => ({
-        ...prev,
-        last_test: new Date(),
-        test_result: results.join('\n'),
-        rtlsdr_connected: results.some(r => r.includes('✓')),
-        dump1090_running: results.some(r => r.includes('JSON data'))
-      }));
-      
     } catch (error: any) {
-      setHardwareStatus(prev => ({
-        ...prev,
-        last_test: new Date(),
-        test_result: `Test failed: ${error.message}`
-      }));
+      setHealthStatus({
+        status: 'OFFLINE',
+        reason: `Health check error: ${error.message}`,
+        timestamp: Date.now()
+      });
     }
   };
+
   // Fetch ADS-B data on component mount and set up interval
   React.useEffect(() => {
     // Initial fetch
     fetchADSBData();
+    fetchHealthStatus();
 
-    // Set up interval for live updates every 2 seconds (RTL-SDR is local and fast)
-    const interval = setInterval(() => {
+    // Set up intervals
+    const aircraftInterval = setInterval(() => {
       fetchADSBData();
     }, 2000);
 
-    return () => clearInterval(interval);
+    const healthInterval = setInterval(() => {
+      fetchHealthStatus();
+    }, 10000);
+
+    return () => {
+      clearInterval(aircraftInterval);
+      clearInterval(healthInterval);
+    };
   }, [gpsData]);
 
   // Filter aircraft based on settings
@@ -369,7 +313,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             <span className="text-sm font-semibold lattice-text-primary">ADS-B Surveillance</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${hardwareStatus.dump1090_running ? 'bg-green-400' : 'bg-red-400'}`} />
+            <div className={`w-2 h-2 rounded-full ${healthStatus.status === 'ONLINE' ? 'bg-green-400' : 'bg-red-400'}`} />
             <span className="text-xs lattice-text-secondary">
               {filteredAircraft.length} aircraft
             </span>
@@ -418,8 +362,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
           
           <div className="flex items-center space-x-1 ml-auto px-2 py-1 lattice-panel rounded">
             <span className="text-xs lattice-text-secondary flex items-center">
-              <Radar className={`h-3 w-3 mr-1 ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`} />
-              ADS-B: {hardwareStatus.dump1090_running ? 'Online' : 'Offline'}
+              <Radar className={`h-3 w-3 mr-1 ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`} />
+              ADS-B: {healthStatus.status}
             </span>
           </div>
         </div>
@@ -533,9 +477,9 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
             ) : error ? (
               <div className="text-center lattice-text-muted py-8">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 lattice-status-error" />
-                <p className="lattice-status-error">RTL-SDR Connection Error</p>
+                <p className="lattice-status-error">ADS-B Connection Error</p>
                 <p className="text-xs mt-2 lattice-text-secondary">{error}</p>
-                <p className="text-xs mt-1 lattice-text-secondary">Make sure dump1090 is running on localhost:8080</p>
+                <p className="text-xs mt-1 lattice-text-secondary">Make sure the proxy server is running</p>
                 <button
                   onClick={fetchADSBData}
                   className="lattice-button text-xs px-3 py-1 mt-3"
@@ -543,11 +487,11 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   Retry
                 </button>
               </div>
-            ) : !hardwareStatus.dump1090_running ? (
+            ) : healthStatus.status === 'OFFLINE' ? (
               <div className="text-center lattice-text-muted py-8">
                 <Radar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>RTL-SDR receiver offline</p>
-                <p className="text-xs mt-2">Check RTL-SDR hardware and dump1090 server</p>
+                <p>ADS-B system offline</p>
+                <p className="text-xs mt-2">{healthStatus.reason || 'Check RTL-SDR hardware and dump1090 service'}</p>
               </div>
             ) : filteredAircraft.length === 0 ? (
               <div className="text-center lattice-text-muted py-8">
@@ -729,41 +673,44 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
               <div className="lattice-panel p-4">
                 <div className="text-sm lattice-status-primary mb-3 font-semibold">Hardware Status</div>
                 
-                {/* RTL-SDR Status */}
+                {/* ADS-B System Status */}
                 <div className="lattice-panel p-3 mb-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs lattice-text-secondary">RTL-SDR Hardware</span>
-                    <span className={`text-xs font-semibold ${hardwareStatus.rtlsdr_connected ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {hardwareStatus.rtlsdr_connected ? 'DETECTED' : 'NOT FOUND'}
+                    <span className="text-xs lattice-text-secondary">ADS-B System</span>
+                    <span className={`text-xs font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.status}
                     </span>
                   </div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs lattice-text-secondary">dump1090 Server</span>
-                    <span className={`text-xs font-semibold ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {hardwareStatus.dump1090_running ? 'RUNNING' : 'STOPPED'}
+                    <span className="text-xs lattice-text-secondary">Proxy Server</span>
+                    <span className={`text-xs font-semibold ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {healthStatus.status === 'ONLINE' ? 'CONNECTED' : 'DISCONNECTED'}
                     </span>
                   </div>
-                  <button
-                    onClick={testRTLSDR}
-                    className="lattice-button text-xs px-3 py-1 w-full flex items-center justify-center space-x-1"
-                  >
-                    <Zap className="h-3 w-3" />
-                    <span>Test RTL-SDR Connection</span>
-                  </button>
+                  {healthStatus.aircraftCount !== undefined && (
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs lattice-text-secondary">Aircraft Count</span>
+                      <span className="text-xs font-semibold lattice-text-primary">{healthStatus.aircraftCount}</span>
+                    </div>
+                  )}
+                  {healthStatus.dataAge !== undefined && (
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs lattice-text-secondary">Data Age</span>
+                      <span className="text-xs font-semibold lattice-text-primary">{healthStatus.dataAge}s</span>
+                    </div>
+                  )}
                 </div>
                 
-                {/* Test Results */}
-                {hardwareStatus.test_result && (
+                {/* Status Details */}
+                {healthStatus.reason && (
                   <div className="lattice-panel p-3 mb-3">
-                    <div className="text-xs lattice-text-secondary mb-1">Test Results:</div>
-                    <div className="text-xs lattice-text-mono lattice-text-primary whitespace-pre-line">
-                      {hardwareStatus.test_result}
+                    <div className="text-xs lattice-text-secondary mb-1">Status Details:</div>
+                    <div className="text-xs lattice-text-primary">
+                      {healthStatus.reason}
                     </div>
-                    {hardwareStatus.last_test && (
-                      <div className="text-xs lattice-text-muted mt-2">
-                        Last test: {hardwareStatus.last_test.toLocaleTimeString()}
-                      </div>
-                    )}
+                    <div className="text-xs lattice-text-muted mt-2">
+                      Last check: {new Date(healthStatus.timestamp).toLocaleTimeString()}
+                    </div>
                   </div>
                 )}
                 
@@ -772,7 +719,7 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                     <div className="text-xs lattice-status-error font-semibold mb-1">Connection Error:</div>
                     <div className="text-xs lattice-text-primary">{error}</div>
                     <div className="text-xs lattice-text-muted mt-2">
-                      Make sure RTL-SDR is connected and dump1090 is running
+                      Make sure the proxy server is running and dump1090-mutability is active
                     </div>
                   </div>
                 )}
@@ -804,8 +751,8 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   </div>
                   <div className="lattice-text-secondary">
                     Connection: 
-                    <span className={`font-semibold ml-1 ${hardwareStatus.dump1090_running ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                      {isLoading ? 'Loading...' : hardwareStatus.dump1090_running ? 'RTL-SDR Online' : 'RTL-SDR Offline'}
+                    <span className={`font-semibold ml-1 ${healthStatus.status === 'ONLINE' ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                      {isLoading ? 'Loading...' : healthStatus.status === 'ONLINE' ? 'ADS-B Online' : 'ADS-B Offline'}
                     </span>
                   </div>
                   <div className="lattice-text-secondary">
@@ -829,13 +776,13 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
                   <div className="lattice-text-secondary">
                     Hardware: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      {hardwareStatus.rtlsdr_connected ? 'RTL-SDR USB' : 'Not Detected'}
+                      {healthStatus.status === 'ONLINE' ? 'RTL-SDR + dump1090' : 'Not Available'}
                     </span>
                   </div>
                   <div className="lattice-text-secondary">
                     Data Source: 
                     <span className="lattice-text-primary font-semibold ml-1">
-                      {hardwareStatus.dump1090_running ? 'dump1090 (local)' : 'No Server'}
+                      {healthStatus.status === 'ONLINE' ? 'dump1090-mutability (local)' : 'No Server'}
                     </span>
                   </div>
                 </div>

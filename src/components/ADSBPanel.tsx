@@ -310,10 +310,10 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     } catch (error: any) {
       setHealthStatus({
         status: 'OFFLINE',
-        reason: `Network error: ${error.message}`,
+        reason: error.message.includes('ECONNREFUSED')
+          ? 'No proxy server detected in this environment'
+          : `Network error: ${error.message}`,
         timestamp: Date.now(),
-      });
-    }
   }, []);
 
   // Fetch ADS-B data on component mount and set up interval

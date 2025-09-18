@@ -136,7 +136,7 @@ app.get('/aircraft.json', (req, res) => {
     // Check if the file exists
     if (!fs.existsSync(AIRCRAFT_JSON_PATH)) {
       log('warn', 'Aircraft JSON file not found', { path: AIRCRAFT_JSON_PATH });
-      return res.json({
+      return res.status(500).json({
         aircraft: [],
         now: Date.now() / 1000,
         messages: 0,
@@ -168,7 +168,7 @@ app.get('/aircraft.json', (req, res) => {
       stack: error.stack,
       path: AIRCRAFT_JSON_PATH
     });
-    res.json({
+    res.status(500).json({
       aircraft: [],
       now: Date.now() / 1000,
       messages: 0,
@@ -186,7 +186,7 @@ app.get('/health', (req, res) => {
     // Check if dump1090-mutability data file exists and is readable
     if (!fs.existsSync(AIRCRAFT_JSON_PATH)) {
       log('warn', 'Health check: Aircraft data file not found');
-      return res.json({
+      return res.status(500).json({
         status: 'OFFLINE',
         reason: 'Aircraft data file not found',
         path: AIRCRAFT_JSON_PATH,
@@ -220,7 +220,7 @@ app.get('/health', (req, res) => {
     
     if (!isRecent) {
       log('warn', 'Health check: Data file is stale');
-      return res.json({
+      return res.status(500).json({
         status: 'OFFLINE',
         reason: 'Data file is stale',
         fileAge: Math.round(fileAge / 1000),
@@ -231,7 +231,7 @@ app.get('/health', (req, res) => {
 
     if (!hasAircraftArray) {
       log('warn', 'Health check: Invalid data format');
-      return res.json({
+      return res.status(500).json({
         status: 'OFFLINE',
         reason: 'Invalid data format',
         timestamp: Date.now(),
@@ -258,7 +258,7 @@ app.get('/health', (req, res) => {
       error: error.message,
       stack: error.stack
     });
-    res.json({
+    res.status(500).json({
       status: 'OFFLINE',
       reason: 'Error reading data file',
       error: error.message,

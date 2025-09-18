@@ -183,13 +183,6 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
       });
 
       if (!response.ok) {
-        if (response.status === 500) {
-          // ADS-B source unavailable (no RTL hardware or dump1090 not running)
-          console.warn('ADS-B proxy online but no data available (500). Hardware/dump1090 not available.');
-          setAircraft([]);
-          return;
-        }
-
         const errorText = await response.text();
         
         // Check if we got HTML instead of expected JSON (indicates proxy server not running)
@@ -216,8 +209,41 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
         throw new Error(`Failed to parse response as JSON: ${parseError.message}. Response: ${responseText.substring(0, 200)}`);
       }
       
+      // Check if we got an error response from the proxy
+      if (data.error) {
+        console.warn('ADS-B hardware/dump1090 not available:', data.error);
+        setAircraft([]);
+        setHealthStatus({
+          status: 'OFFLINE',
+          reason: data.error,
+          timestamp: Date.now()
+        });
+        return;
+      }
+      
       if (!data.aircraft) {
         data.aircraft = [];
+      }
+      
+      // Update health status based on data quality
+      const now = Date.now() / 1000;
+      const dataAge = data.now ? Math.abs(now - data.now) : 0;
+      
+      if (dataAge > 30) {
+        // Data is too old, likely hardware disconnected
+        setHealthStatus({
+          status: 'OFFLINE',
+          reason: `Stale data (${dataAge.toFixed(0)}s old)`,
+          timestamp: Date.now()
+        });
+      } else {
+        // Data is fresh, system is online
+        setHealthStatus({
+          status: 'ONLINE',
+          aircraftCount: data.aircraft.length,
+          dataAge: dataAge,
+          timestamp: Date.now()
+        });
       }
 
       // Transform dump1090-mutability data to our Aircraft interface
@@ -329,21 +355,18 @@ export default function ADSBPanel({ onHeaderClick, isSelecting, gpsData }: ADSBP
     // Initial fetch
     fetchHealthStatus();
 
-    // Set up health check interval (always runs to detect when hardware comes back)
+    // Set up health check interval
     const healthInterval = setInterval(fetchHealthStatus, 10000);
 
-    // Set up aircraft data interval only if system is online
-    let aircraftInterval: NodeJS.Timeout | null = null;
-    if (healthStatus.status === 'ONLINE') {
-      fetchADSBData(); // Initial fetch
-      aircraftInterval = setInterval(fetchADSBData, 2000);
-    }
+    // Set up aircraft data interval (always runs to detect status changes)
+    fetchADSBData(); // Initial fetch
+    const aircraftInterval = setInterval(fetchADSBData, 2000);
 
     return () => {
       clearInterval(healthInterval);
-      if (aircraftInterval) clearInterval(aircraftInterval);
+      clearInterval(aircraftInterval);
     };
-  }, [fetchADSBData, fetchHealthStatus, healthStatus.status]);
+  }, [fetchADSBData, fetchHealthStatus]);
 
   // Filter aircraft based on settings
   const filteredAircraft = aircraft.filter(ac => {

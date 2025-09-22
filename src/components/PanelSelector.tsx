@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Navigation, Cloud, Activity, Target, Video, Radio, Compass, Radar, Brain, Map, Package, Clock } from 'lucide-react';
 
-type PanelType = 'adsb' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'software' | 'comms' | 'navigation' | 'sensors' | 'intel';
+type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'software' | 'comms' | 'navigation' | 'sensors' | 'intel';
 
 interface PanelOption {
   type: PanelType;
@@ -22,6 +22,13 @@ const panelOptions: PanelOption[] = [
     type: 'adsb',
     name: 'ADS-B SURVEILLANCE',
     description: 'Aircraft tracking and identification',
+    icon: Navigation,
+    status: 'active'
+  },
+  {
+    type: 'adsb-demo',
+    name: 'ADS-B SURVEILLANCE DEMO',
+    description: 'Demo aircraft tracking around Trondheim Airport',
     icon: Navigation,
     status: 'active'
   },

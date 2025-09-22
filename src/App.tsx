@@ -5,6 +5,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import GridLayout from './components/GridLayout';
 import Header, { GPSData } from './components/Header';
 import ADSBPanel from './components/ADSBPanel';
+import ADSBDemoPanel from './components/ADSBDemoPanel';
 import WeatherPanel from './components/WeatherPanel';
 import SpectrumPanel from './components/SpectrumPanel';
 import TacticalPanel from './components/TacticalPanel';

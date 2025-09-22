@@ -6,7 +6,7 @@ interface NetworkCamera {
   id: string;
   name: string;
   url: string;
-  type: 'rtsp' | 'http' | 'hls' | 'webrtc' | 'mjpeg' | 'onvif';
+  type: 'rtsp' | 'http' | 'hls' | 'webrtc' | 'mjpeg' | 'onvif' | 'webcam';
   username?: string;
   password?: string;
   enabled: boolean;
@@ -27,6 +27,19 @@ interface VideoPanelProps {
 export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelProps) {
   const [videoLayer, setVideoLayer] = React.useState<'feeds' | 'settings'>('feeds');
   const [cameras, setCameras] = useLocalStorage<NetworkCamera[]>('videoCameras', [
+    {
+      id: 'webcam-local',
+      name: 'Onboard Webcam',
+      url: 'local://webcam',
+      type: 'webcam',
+      enabled: false,
+      status: 'offline',
+      resolution: '1280x720',
+      framerate: 30,
+      codec: 'WebRTC',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
     {
       id: '1',
       name: 'Perimeter Cam 1',
@@ -107,12 +120,13 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
   const [newCamera, setNewCamera] = React.useState({
     name: '',
     url: '',
-    type: 'rtsp' as NetworkCamera['type'],
+    type: 'webcam' as NetworkCamera['type'],
     username: '',
     password: '',
     resolution: '1920x1080',
     framerate: 30
   });
+  const webcamStreamRef = React.useRef<MediaStream | null>(null);
 
   const activeCameras = cameras.filter(cam => cam.enabled);
   const connectedCameras = cameras.filter(cam => cam.enabled && cam.status === 'connected');
@@ -294,6 +308,7 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
 
   const getStreamTypeIcon = (type: NetworkCamera['type']) => {
     switch (type) {
+      case 'webcam': return '📷';
       case 'rtsp': return '📹';
       case 'http': return '🌐';
       case 'hls': return '📺';
@@ -306,6 +321,7 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
 
   const getStreamTypeLabel = (type: NetworkCamera['type']) => {
     switch (type) {
+      case 'webcam': return 'Webcam';
       case 'rtsp': return 'RTSP';
       case 'http': return 'HTTP';
       case 'hls': return 'HLS';
@@ -317,12 +333,29 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
   };
 
   const toggleCamera = (id: string) => {
+    const camera = cameras.find(cam => cam.id === id);
+    
+    // If disabling a webcam, stop its stream
+    if (camera?.type === 'webcam' && camera.enabled && webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach(track => track.stop());
+      webcamStreamRef.current = null;
+    }
+    
     setCameras(prev => prev.map(cam => 
       cam.id === id 
         ? { ...cam, enabled: !cam.enabled, status: cam.enabled ? 'offline' : 'connecting', updatedAt: new Date() }
         : cam
     ));
   };
+
+  // Cleanup webcam stream on unmount
+  React.useEffect(() => {
+    return () => {
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const renderVideoElement = (camera: NetworkCamera) => {
     const videoProps = {
@@ -349,6 +382,9 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
     };
 
     switch (camera.type) {
+      case 'webcam':
+        return <WebcamVideo camera={camera} webcamStreamRef={webcamStreamRef} setCameras={setCameras} />;
+      
       case 'hls':
         // For HLS streams, we need to use a library like hls.js
         return (
@@ -424,6 +460,71 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
           </video>
         );
     }
+  };
+
+  // Webcam Video Component
+  const WebcamVideo = ({ 
+    camera, 
+    webcamStreamRef, 
+    setCameras 
+  }: { 
+    camera: NetworkCamera; 
+    webcamStreamRef: React.MutableRefObject<MediaStream | null>;
+    setCameras: React.Dispatch<React.SetStateAction<NetworkCamera[]>>;
+  }) => {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+
+    React.useEffect(() => {
+      if (camera.enabled && videoRef.current) {
+        // Request webcam access
+        navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          } 
+        })
+        .then((stream) => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            webcamStreamRef.current = stream;
+            
+            // Update camera status
+            setCameras(prev => prev.map(cam => 
+              cam.id === camera.id 
+                ? { ...cam, status: 'connected', lastSeen: new Date() }
+                : cam
+            ));
+          }
+        })
+        .catch((error) => {
+          console.error('Error accessing webcam:', error);
+          setCameras(prev => prev.map(cam => 
+            cam.id === camera.id 
+              ? { ...cam, status: 'error' }
+              : cam
+          ));
+        });
+      } else if (!camera.enabled && webcamStreamRef.current) {
+        // Stop webcam stream when disabled
+        webcamStreamRef.current.getTracks().forEach(track => track.stop());
+        webcamStreamRef.current = null;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      }
+    }, [camera.enabled, camera.id, webcamStreamRef, setCameras]);
+
+    return (
+      <video
+        ref={videoRef}
+        className="w-full h-full object-cover"
+        autoPlay
+        muted
+        playsInline
+      />
+    );
   };
 
   const renderVideoFeed = (camera: NetworkCamera, className: string = '') => {
@@ -504,6 +605,8 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
   // Helper function for URL placeholders
   function getUrlPlaceholder(type: NetworkCamera['type']): string {
     switch (type) {
+      case 'webcam':
+        return 'Local webcam (no URL needed)';
       case 'http':
         return 'http://example.com/video.mp4';
       case 'hls':
@@ -695,6 +798,7 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
                       onChange={(e) => setNewCamera(prev => ({ ...prev, type: e.target.value as NetworkCamera['type'] }))}
                       className="w-full lattice-input text-xs"
                     >
+                      <option value="webcam">Local Webcam</option>
                       <option value="http">HTTP Stream</option>
                       <option value="hls">HLS Stream (.m3u8)</option>
                       <option value="mjpeg">MJPEG Stream</option>
@@ -709,13 +813,15 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
                       type="text"
                       value={newCamera.url}
                       onChange={(e) => setNewCamera(prev => ({ ...prev, url: e.target.value }))}
-                      className="w-full lattice-input text-xs"
+                      className={`w-full lattice-input text-xs ${newCamera.type === 'webcam' ? 'opacity-50' : ''}`}
                       placeholder={getUrlPlaceholder(newCamera.type)}
+                      disabled={newCamera.type === 'webcam'}
+                      readOnly={newCamera.type === 'webcam'}
                     />
                   </div>
                   
                   {/* Authentication Section */}
-                  {(newCamera.type === 'rtsp' || newCamera.type === 'http' || newCamera.type === 'onvif') && (
+                  {(newCamera.type === 'rtsp' || newCamera.type === 'http' || newCamera.type === 'onvif') && newCamera.type !== 'webcam' && (
                     <>
                       <div className="grid grid-cols-2 gap-2">
                         <div>

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Navigation, Plane, Settings, Radar, AlertTriangle, MapPin, Clock, Zap, Map, List, Activity } from 'lucide-react';
+import { Plane as PlaneIcon, Helicopter } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import { Icon, LatLngTuple } from 'leaflet';
+import { Icon, LatLngTuple, DivIcon } from 'leaflet';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import 'leaflet/dist/leaflet.css';
 
@@ -57,89 +58,51 @@ const getBearing = (lat1: number, lon1: number, lat2: number, lon2: number): num
 };
 
 // Create aircraft marker icon
-const createAircraftIcon = (heading: number, altitude: number, aircraftType: string) => {
+const createAircraftIcon = (heading: number, altitude: number, aircraftType: string): DivIcon => {
   const color = altitude < 5000 ? '#ff4444' : altitude < 10000 ? '#ffaa00' : '#00ff88';
   
-  let iconSvg = '';
+  // Determine if it's a helicopter
+  const isHelicopter = aircraftType.toLowerCase().includes('h') || 
+    aircraftType.toLowerCase().includes('helicopter') ||
+    aircraftType.toLowerCase().includes('ec') ||
+    aircraftType.toLowerCase().includes('bell') ||
+    aircraftType.toLowerCase().includes('as') ||
+    aircraftType.toLowerCase().includes('uh') ||
+    aircraftType.toLowerCase().includes('ah');
   
-  // Check for helicopter indicators
-  if (aircraftType.toLowerCase().includes('h') || 
-      aircraftType.toLowerCase().includes('helicopter') ||
-      aircraftType.toLowerCase().includes('ec') ||
-      aircraftType.toLowerCase().includes('bell') ||
-      aircraftType.toLowerCase().includes('as') ||
-      aircraftType.toLowerCase().includes('uh') ||
-      aircraftType.toLowerCase().includes('ah')) {
-    // Improved helicopter symbol
-    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <ellipse cx="14" cy="14" rx="12" ry="6" fill="${color}" stroke="#000" stroke-width="1.5"/>
-      <rect x="12" y="8" width="4" height="12" fill="#000" rx="1"/>
-      <ellipse cx="14" cy="6" rx="10" ry="1.5" fill="#333" opacity="0.8"/>
-      <ellipse cx="14" cy="22" rx="8" ry="1" fill="#333" opacity="0.6"/>
-      <circle cx="14" cy="14" r="2" fill="#000"/>
-    </svg>`;
-  } else if (aircraftType.toLowerCase().includes('light') ||
-             aircraftType.toLowerCase().includes('c1') ||
-             aircraftType.toLowerCase().includes('c2') ||
-             aircraftType.toLowerCase().includes('pa') ||
-             aircraftType.toLowerCase().includes('sr') ||
-             aircraftType.toLowerCase().includes('da') ||
-             aircraftType.toLowerCase().includes('tb') ||
-             aircraftType.toLowerCase().includes('p2') ||
-             aircraftType.toLowerCase().includes('cessna') ||
-             aircraftType.toLowerCase().includes('piper')) {
-    // Improved small aircraft symbol
-    iconSvg = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M13 3L14 9L22 11L14 13L13 23L12 13L4 11L12 9L13 3Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
-      <ellipse cx="13" cy="11" rx="8" ry="2" fill="${color}" opacity="0.7"/>
-      <rect x="12" y="8" width="2" height="10" fill="#000" opacity="0.8"/>
-    </svg>`;
-  } else if (aircraftType.toLowerCase().includes('heavy') ||
-             aircraftType.toLowerCase().includes('a3') ||
-             aircraftType.toLowerCase().includes('a4') ||
-             aircraftType.toLowerCase().includes('b7') ||
-             aircraftType.toLowerCase().includes('b74') ||
-             aircraftType.toLowerCase().includes('b77') ||
-             aircraftType.toLowerCase().includes('b78') ||
-             aircraftType.toLowerCase().includes('a380') ||
-             aircraftType.toLowerCase().includes('boeing') ||
-             aircraftType.toLowerCase().includes('airbus')) {
-    // Improved large aircraft symbol
-    iconSvg = `<svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M15 2L17 7L26 9L17 11L15 28L13 11L4 9L13 7L15 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
-      <ellipse cx="15" cy="9" rx="11" ry="3" fill="${color}" opacity="0.6"/>
-      <rect x="13" y="6" width="4" height="18" fill="#000" opacity="0.7"/>
-      <ellipse cx="15" cy="15" rx="2" ry="6" fill="#000" opacity="0.8"/>
-    </svg>`;
-  } else if (aircraftType.toLowerCase().includes('mil') ||
-             aircraftType.toLowerCase().includes('f') ||
-             aircraftType.toLowerCase().includes('fighter') ||
-             aircraftType.toLowerCase().includes('military') ||
-             aircraftType.toLowerCase().includes('eurofighter') ||
-             aircraftType.toLowerCase().includes('tornado') ||
-             aircraftType.toLowerCase().includes('hawk')) {
-    // Improved military aircraft symbol
-    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M14 2L16 6L24 8L16 10L14 26L12 10L4 8L12 6L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
-      <polygon points="10,8 18,8 16,14 12,14" fill="#000" opacity="0.8"/>
-      <rect x="13" y="4" width="2" height="20" fill="#000" opacity="0.9"/>
-      <polygon points="8,10 20,10 18,12 10,12" fill="${color}" opacity="0.7"/>
-    </svg>`;
-  } else {
-    // Improved default commercial aircraft symbol
-    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M14 2L16 8L24 10L16 12L14 26L12 12L4 10L12 8L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
-      <ellipse cx="14" cy="10" rx="10" ry="2.5" fill="${color}" opacity="0.6"/>
-      <rect x="13" y="7" width="2" height="14" fill="#000" opacity="0.8"/>
-      <circle cx="14" cy="14" r="1.5" fill="#000"/>
-    </svg>`;
-  }
+  // Create HTML string with Lucide icon
+  const iconHtml = `
+    <div style="
+      width: 32px; 
+      height: 32px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      transform: rotate(${heading}deg);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    ">
+      ${isHelicopter ? 
+        `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/>
+          <path d="M14 7h1"/>
+          <path d="M19 19v2"/>
+          <path d="M5 19v2"/>
+          <path d="m2 13 8-2v-2l-6-2v-2l4-1 10 3h6l-3 7-4.5-1"/>
+          <circle cx="12" cy="12" r="3" fill="${color}"/>
+        </svg>` :
+        `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="${color}"/>
+        </svg>`
+      }
+    </div>
+  `;
   
-  return new Icon({
-    iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg),
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14],
+  return new DivIcon({
+    html: iconHtml,
+    className: 'aircraft-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
   });
 };
 

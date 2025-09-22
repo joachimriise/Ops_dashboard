@@ -350,4 +350,10 @@
     padding: 0 !important;
     margin: 0 !important;
   }
+  
+  /* Aircraft marker styling */
+  .aircraft-marker {
+    background: transparent !important;
+    border: none !important;
+  }
 }

@@ -352,8 +352,3 @@
   }
   
   /* Aircraft marker styling */
-  .aircraft-marker {
-    background: transparent !important;
-    border: none !important;
-  }
-}

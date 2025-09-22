@@ -1,6 +1,5 @@
 import React from 'react';
 import { Navigation, Plane, Settings, Radar, AlertTriangle, MapPin, Clock, Zap, Map, List, Activity } from 'lucide-react';
-import { Plane as PlaneIcon, HeaterIcon as Helicopter } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { Icon, LatLngTuple } from 'leaflet';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -71,17 +70,33 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
       aircraftType.toLowerCase().includes('as') ||
       aircraftType.toLowerCase().includes('uh') ||
       aircraftType.toLowerCase().includes('ah')) {
-    // Helicopter symbol using Lucide helicopter path
+    // Improved helicopter symbol
     iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <g transform="translate(2, 2)">
-        <path d="M10 2v2a4 4 0 0 0-4 4v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8a4 4 0 0 0-4-4V2" 
-              fill="${color}" stroke="#000" stroke-width="1.2"/>
-        <path d="M5 8h14" stroke="#000" stroke-width="1.5"/>
-        <path d="M7 22h10" stroke="#000" stroke-width="1.5"/>
-        <circle cx="12" cy="12" r="2" fill="#000"/>
-      </g>
+      <ellipse cx="14" cy="14" rx="12" ry="6" fill="${color}" stroke="#000" stroke-width="1.5"/>
+      <rect x="12" y="8" width="4" height="12" fill="#000" rx="1"/>
+      <ellipse cx="14" cy="6" rx="10" ry="1.5" fill="#333" opacity="0.8"/>
+      <ellipse cx="14" cy="22" rx="8" ry="1" fill="#333" opacity="0.6"/>
+      <circle cx="14" cy="14" r="2" fill="#000"/>
     </svg>`;
-  } else if (aircraftType.toLowerCase().includes('a4') ||
+  } else if (aircraftType.toLowerCase().includes('light') ||
+             aircraftType.toLowerCase().includes('c1') ||
+             aircraftType.toLowerCase().includes('c2') ||
+             aircraftType.toLowerCase().includes('pa') ||
+             aircraftType.toLowerCase().includes('sr') ||
+             aircraftType.toLowerCase().includes('da') ||
+             aircraftType.toLowerCase().includes('tb') ||
+             aircraftType.toLowerCase().includes('p2') ||
+             aircraftType.toLowerCase().includes('cessna') ||
+             aircraftType.toLowerCase().includes('piper')) {
+    // Improved small aircraft symbol
+    iconSvg = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <path d="M13 3L14 9L22 11L14 13L13 23L12 13L4 11L12 9L13 3Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <ellipse cx="13" cy="11" rx="8" ry="2" fill="${color}" opacity="0.7"/>
+      <rect x="12" y="8" width="2" height="10" fill="#000" opacity="0.8"/>
+    </svg>`;
+  } else if (aircraftType.toLowerCase().includes('heavy') ||
+             aircraftType.toLowerCase().includes('a3') ||
+             aircraftType.toLowerCase().includes('a4') ||
              aircraftType.toLowerCase().includes('b7') ||
              aircraftType.toLowerCase().includes('b74') ||
              aircraftType.toLowerCase().includes('b77') ||
@@ -111,13 +126,12 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
       <polygon points="8,10 20,10 18,12 10,12" fill="${color}" opacity="0.7"/>
     </svg>`;
   } else {
-    // Airplane symbol using Lucide plane path
+    // Improved default commercial aircraft symbol
     iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <g transform="translate(2, 2)">
-        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" 
-              fill="${color}" stroke="#000" stroke-width="1.2"/>
-        <circle cx="12" cy="12" r="1.5" fill="#000"/>
-      </g>
+      <path d="M14 2L16 8L24 10L16 12L14 26L12 12L4 10L12 8L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <ellipse cx="14" cy="10" rx="10" ry="2.5" fill="${color}" opacity="0.6"/>
+      <rect x="13" y="7" width="2" height="14" fill="#000" opacity="0.8"/>
+      <circle cx="14" cy="14" r="1.5" fill="#000"/>
     </svg>`;
   }
   
@@ -125,7 +139,7 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
     iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg),
     iconSize: [28, 28],
     iconAnchor: [14, 14],
-    popupAnchor: [0, -14]
+    popupAnchor: [0, -14],
   });
 };
 

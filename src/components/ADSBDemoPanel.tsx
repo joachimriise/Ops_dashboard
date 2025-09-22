@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigation, Plane, Settings, Radar, AlertTriangle, MapPin, Clock, Zap, Map, List, Activity } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { Icon, LatLngTuple } from 'leaflet';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import 'leaflet/dist/leaflet.css';
@@ -232,7 +232,7 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
   const [selectedAircraft, setSelectedAircraft] = React.useState<string | null>(null);
   const [mapCenter, setMapCenter] = React.useState<LatLngTuple>([TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]);
   const [mapZoom, setMapZoom] = React.useState(10);
-  const [maxRange, setMaxRange] = useLocalStorage('adsbDemoMaxRange', 250); // km
+  const [maxRange, setMaxRange] = useLocalStorage('adsbDemoMaxRange', 15); // km
   const [minAltitude, setMinAltitude] = useLocalStorage('adsbDemoMinAltitude', 0); // feet
   const [maxAltitude, setMaxAltitude] = useLocalStorage('adsbDemoMaxAltitude', 50000); // feet
   const [showMilitary, setShowMilitary] = useLocalStorage('adsbDemoShowMilitary', true);
@@ -390,6 +390,20 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                   attribution="© OpenStreetMap contributors"
                   maxZoom={19}
                   className="map-lattice"
+                />
+                
+                {/* Range Circle */}
+                <Circle
+                  center={[TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]}
+                  radius={maxRange * 1000} // Convert km to meters
+                  pathOptions={{
+                    color: '#00d4ff',
+                    weight: 2,
+                    opacity: 0.6,
+                    fillColor: '#00d4ff',
+                    fillOpacity: 0.1,
+                    dashArray: '5, 10'
+                  }}
                 />
                 
                 {/* Aircraft Markers */}
@@ -553,9 +567,9 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                     </label>
                     <input
                       type="range"
-                      min="10"
-                      max="500"
-                      step="10"
+                      min="0"
+                      max="30"
+                      step="1"
                       value={maxRange}
                       onChange={(e) => setMaxRange(parseInt(e.target.value))}
                       className="w-full accent-cyan-400"

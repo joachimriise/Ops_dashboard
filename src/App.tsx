@@ -10,6 +10,7 @@ import WeatherPanel from './components/WeatherPanel';
 import SpectrumPanel from './components/SpectrumPanel';
 import TacticalPanel from './components/TacticalPanel';
 import VideoPanel from './components/VideoPanel';
+import ADSBDemoPanel from './components/ADSBDemoPanel';
 import MapPanel from './components/MapPanel';
 import SoftwarePanel from './components/SoftwarePanel';
 import FlightLoggerPanel from './components/FlightLoggerPanel';
@@ -107,7 +108,7 @@ interface ADSBSettings {
   radiusKm: number;
 }
 
-type PanelType = 'adsb' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'comms' | 'navigation' | 'sensors' | 'intel' | 'software' | 'flight-logger';
+type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'comms' | 'navigation' | 'sensors' | 'intel' | 'software' | 'flight-logger';
 
 interface PanelItem {
   id: string;
@@ -834,6 +835,7 @@ export default function App() {
   const getPanelTitle = (type: PanelType): string => {
     const titles = {
       adsb: 'ADS-B SURVEILLANCE',
+      'adsb-demo': 'ADS-B DEMO',
       weather: 'WEATHER CONDITIONS',
       spectrum: 'SPECTRUM ANALYZER',
       tactical: 'TACTICAL DISPLAY',
@@ -871,6 +873,8 @@ export default function App() {
             onSettingsChange={setAdsbSettings}
           />
         );
+      case 'adsb-demo':
+        return <ADSBDemoPanel {...commonProps} gpsData={gpsData} />;
       case 'weather':
         return (
           <WeatherPanel

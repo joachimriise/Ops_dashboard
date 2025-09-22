@@ -10,7 +10,6 @@ import WeatherPanel from './components/WeatherPanel';
 import SpectrumPanel from './components/SpectrumPanel';
 import TacticalPanel from './components/TacticalPanel';
 import VideoPanel from './components/VideoPanel';
-import ADSBDemoPanel from './components/ADSBDemoPanel';
 import MapPanel from './components/MapPanel';
 import SoftwarePanel from './components/SoftwarePanel';
 import FlightLoggerPanel from './components/FlightLoggerPanel';

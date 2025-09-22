@@ -527,45 +527,84 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
     );
   };
 
-  const renderVideoFeed = (camera: NetworkCamera, className: string = '') => {
+  const renderVideoFeed = (camera: NetworkCamera, className: string = '', isFullscreen: boolean = false) => {
     return (
       <div key={camera.id} className={`bg-slate-900 military-panel rounded relative ${className}`}>
-        {/* Camera Header */}
-        <div className="absolute top-0 left-0 right-0 bg-black/80 backdrop-blur-sm px-3 py-2 z-10 rounded-t-lg">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold lattice-text-primary truncate">{camera.name}</span>
-            <div className="flex items-center space-x-1">
-              <div className={`w-2 h-2 rounded-full ${
-                camera.status === 'connected' ? 'bg-green-400' :
-                camera.status === 'connecting' ? 'bg-amber-400' :
-                camera.status === 'error' ? 'bg-red-400' :
-                'bg-slate-400'
-              }`} />
-              <span className="text-xs lattice-text-secondary">
-                {camera.status === 'connected' ? 'Live' :
-                 camera.status === 'connecting' ? 'Connecting' :
-                 camera.status === 'error' ? 'Error' :
-                 'Offline'}
-              </span>
+        {/* Camera Header - Only show in grid view or when not fullscreen */}
+        {!isFullscreen && (
+          <div className="absolute top-0 left-0 right-0 bg-black/80 backdrop-blur-sm px-3 py-2 z-10 rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold lattice-text-primary truncate">{camera.name}</span>
+              <div className="flex items-center space-x-1">
+                <div className={`w-2 h-2 rounded-full ${
+                  camera.status === 'connected' ? 'bg-green-400' :
+                  camera.status === 'connecting' ? 'bg-amber-400' :
+                  camera.status === 'error' ? 'bg-red-400' :
+                  'bg-slate-400'
+                }`} />
+                <span className="text-xs lattice-text-secondary">
+                  {camera.status === 'connected' ? 'Live' :
+                   camera.status === 'connecting' ? 'Connecting' :
+                   camera.status === 'error' ? 'Error' :
+                   'Offline'}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Fullscreen Camera Header Overlay */}
+        {isFullscreen && (
+          <div className="absolute top-4 left-4 right-4 bg-black/60 backdrop-blur-sm px-4 py-2 z-20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-sm font-semibold lattice-text-primary">{camera.name}</span>
+                <span className="text-xs lattice-text-secondary">({getStreamTypeLabel(camera.type)})</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  camera.status === 'connected' ? 'bg-green-400' :
+                  camera.status === 'connecting' ? 'bg-amber-400' :
+                  camera.status === 'error' ? 'bg-red-400' :
+                  'bg-slate-400'
+                }`} />
+                <span className="text-xs lattice-text-secondary">
+                  {camera.status === 'connected' ? 'LIVE' :
+                   camera.status === 'connecting' ? 'CONNECTING' :
+                   camera.status === 'error' ? 'ERROR' :
+                   'OFFLINE'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Video Content */}
-        <div className="w-full h-full flex items-center justify-center pt-10">
+        <div className={`w-full h-full flex items-center justify-center ${isFullscreen ? '' : 'pt-10'}`}>
           {camera.status === 'connected' ? (
             <div className="w-full h-full bg-gray-900 rounded-lg overflow-hidden relative">
               {renderVideoElement(camera)}
               
-              {/* Video overlay info */}
-              <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs">
-                <div className="lattice-status-good font-semibold">● LIVE</div>
-                <div className="lattice-text-secondary">
-                  {getStreamTypeLabel(camera.type)}
-                  {camera.resolution && <span> • {camera.resolution}</span>}
-                  {camera.framerate && <span> • {camera.framerate}fps</span>}
+              {/* Video overlay info - Bottom overlay for fullscreen */}
+              {isFullscreen ? (
+                <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm px-3 py-2 rounded text-xs">
+                  <div className="lattice-status-good font-semibold">● LIVE</div>
+                  <div className="lattice-text-secondary">
+                    {getStreamTypeLabel(camera.type)}
+                    {camera.resolution && <span> • {camera.resolution}</span>}
+                    {camera.framerate && <span> • {camera.framerate}fps</span>}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs">
+                  <div className="lattice-status-good font-semibold">● LIVE</div>
+                  <div className="lattice-text-secondary">
+                    {getStreamTypeLabel(camera.type)}
+                    {camera.resolution && <span> • {camera.resolution}</span>}
+                    {camera.framerate && <span> • {camera.framerate}fps</span>}
+                  </div>
+                </div>
+              )}
             </div>
           ) : camera.status === 'connecting' ? (
             <div className="text-center">
@@ -585,16 +624,39 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
           )}
         </div>
 
-        {/* Camera Controls (only in single view) */}
-        {viewMode === 'single' && (
-          <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm px-3 py-2 rounded-b-lg">
-            <div className="flex items-center justify-between">
-              <div className="text-xs lattice-text-secondary">
-                {camera.lastSeen && `Last: ${camera.lastSeen.toLocaleTimeString()}`}
-              </div>
+        {/* Fullscreen Camera Controls Overlay */}
+        {isFullscreen && (
+          <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-lg">
+            <div className="flex items-center space-x-3 text-xs">
+              {camera.lastSeen && (
+                <div className="lattice-text-secondary">
+                  Last: {camera.lastSeen.toLocaleTimeString()}
+                </div>
+              )}
               <button className="lattice-text-secondary hover:lattice-text-primary transition-colors">
                 <Maximize2 className="h-3 w-3" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Grid View Camera Header (kept for grid mode) */}
+        {!isFullscreen && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold lattice-text-primary truncate">{camera.name}</span>
+            <div className="flex items-center space-x-1">
+              <div className={`w-2 h-2 rounded-full ${
+                camera.status === 'connected' ? 'bg-green-400' :
+                camera.status === 'connecting' ? 'bg-amber-400' :
+                camera.status === 'error' ? 'bg-red-400' :
+                'bg-slate-400'
+              }`} />
+              <span className="text-xs lattice-text-secondary">
+                {camera.status === 'connected' ? 'Live' :
+                 camera.status === 'connecting' ? 'Connecting' :
+                 camera.status === 'error' ? 'Error' :
+                 'Offline'}
+              </span>
             </div>
           </div>
         )}
@@ -669,8 +731,23 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
             </button>
           </div>
           
-          {videoLayer === 'feeds' && (
+          {videoLayer === 'feeds' && activeCameras.length > 0 && (
             <div className="flex items-center space-x-1">
+              {/* Camera Selector for Single View */}
+              {viewMode === 'single' && (
+                <select
+                  value={selectedCamera}
+                  onChange={(e) => setSelectedCamera(e.target.value)}
+                  className="lattice-input text-xs mr-2"
+                >
+                  {activeCameras.map(camera => (
+                    <option key={camera.id} value={camera.id}>
+                      {camera.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              
               <button
                 onClick={() => setViewMode('single')}
                 className={`lattice-tab px-2 py-1 text-xs rounded transition-all ${
@@ -710,27 +787,12 @@ export default function VideoPanel({ onHeaderClick, isSelecting }: VideoPanelPro
                 </div>
               </div>
             ) : viewMode === 'single' ? (
-              <div className="h-full">
-                {/* Camera Selector */}
-                <div className="mb-4">
-                  <select
-                    value={selectedCamera}
-                    onChange={(e) => setSelectedCamera(e.target.value)}
-                    className="lattice-input text-xs"
-                  >
-                    {activeCameras.map(camera => (
-                      <option key={camera.id} value={camera.id}>
-                        {camera.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* Single Camera View */}
-                <div className="h-[calc(100%-56px)]">
+              <div className="h-full relative">
+                {/* Single Camera View - Fullscreen */}
+                <div className="absolute inset-0">
                   {(() => {
                     const camera = activeCameras.find(cam => cam.id === selectedCamera);
-                    return camera ? renderVideoFeed(camera, 'h-full') : null;
+                    return camera ? renderVideoFeed(camera, 'h-full', true) : null;
                   })()}
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigation, Plane, Settings, Radar, AlertTriangle, MapPin, Clock, Zap, Map, List, Activity } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { Icon, LatLngTuple } from 'leaflet';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import 'leaflet/dist/leaflet.css';
@@ -60,7 +60,6 @@ const getBearing = (lat1: number, lon1: number, lat2: number, lon2: number): num
 const createAircraftIcon = (heading: number, altitude: number, aircraftType: string) => {
   const color = altitude < 5000 ? '#ff4444' : altitude < 10000 ? '#ffaa00' : '#00ff88';
   
-  // Determine aircraft symbol based on type
   let iconSvg = '';
   
   // Check for helicopter indicators
@@ -71,11 +70,13 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
       aircraftType.toLowerCase().includes('as') ||
       aircraftType.toLowerCase().includes('uh') ||
       aircraftType.toLowerCase().includes('ah')) {
-    // Helicopter symbol
-    iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <circle cx="12" cy="12" r="8" fill="${color}" stroke="#000" stroke-width="1"/>
-      <path d="M4 12h16M12 4v16" stroke="#000" stroke-width="2"/>
-      <path d="M6 6l12 12M18 6L6 18" stroke="#000" stroke-width="1"/>
+    // Improved helicopter symbol
+    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <ellipse cx="14" cy="14" rx="12" ry="6" fill="${color}" stroke="#000" stroke-width="1.5"/>
+      <rect x="12" y="8" width="4" height="12" fill="#000" rx="1"/>
+      <ellipse cx="14" cy="6" rx="10" ry="1.5" fill="#333" opacity="0.8"/>
+      <ellipse cx="14" cy="22" rx="8" ry="1" fill="#333" opacity="0.6"/>
+      <circle cx="14" cy="14" r="2" fill="#000"/>
     </svg>`;
   } else if (aircraftType.toLowerCase().includes('light') ||
              aircraftType.toLowerCase().includes('c1') ||
@@ -87,10 +88,11 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
              aircraftType.toLowerCase().includes('p2') ||
              aircraftType.toLowerCase().includes('cessna') ||
              aircraftType.toLowerCase().includes('piper')) {
-    // Small aircraft symbol
-    iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M12 2L13 10L20 12L13 14L12 22L11 14L4 12L11 10L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
-      <circle cx="12" cy="12" r="2" fill="#000"/>
+    // Improved small aircraft symbol
+    iconSvg = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <path d="M13 3L14 9L22 11L14 13L13 23L12 13L4 11L12 9L13 3Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <ellipse cx="13" cy="11" rx="8" ry="2" fill="${color}" opacity="0.7"/>
+      <rect x="12" y="8" width="2" height="10" fill="#000" opacity="0.8"/>
     </svg>`;
   } else if (aircraftType.toLowerCase().includes('heavy') ||
              aircraftType.toLowerCase().includes('a3') ||
@@ -102,11 +104,12 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
              aircraftType.toLowerCase().includes('a380') ||
              aircraftType.toLowerCase().includes('boeing') ||
              aircraftType.toLowerCase().includes('airbus')) {
-    // Large aircraft symbol
-    iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M12 2L15 8L22 10L15 12L12 22L9 12L2 10L9 8L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
-      <rect x="10" y="10" width="4" height="4" fill="#000"/>
-      <path d="M8 8L16 16M16 8L8 16" stroke="#000" stroke-width="1"/>
+    // Improved large aircraft symbol
+    iconSvg = `<svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <path d="M15 2L17 7L26 9L17 11L15 28L13 11L4 9L13 7L15 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <ellipse cx="15" cy="9" rx="11" ry="3" fill="${color}" opacity="0.6"/>
+      <rect x="13" y="6" width="4" height="18" fill="#000" opacity="0.7"/>
+      <ellipse cx="15" cy="15" rx="2" ry="6" fill="#000" opacity="0.8"/>
     </svg>`;
   } else if (aircraftType.toLowerCase().includes('mil') ||
              aircraftType.toLowerCase().includes('f') ||
@@ -115,25 +118,28 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
              aircraftType.toLowerCase().includes('eurofighter') ||
              aircraftType.toLowerCase().includes('tornado') ||
              aircraftType.toLowerCase().includes('hawk')) {
-    // Military aircraft symbol
-    iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M12 2L14 6L20 8L14 10L12 22L10 10L4 8L10 6L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
-      <polygon points="8,8 16,8 14,12 10,12" fill="#000"/>
-      <path d="M12 6v12" stroke="#000" stroke-width="2"/>
+    // Improved military aircraft symbol
+    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <path d="M14 2L16 6L24 8L16 10L14 26L12 10L4 8L12 6L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <polygon points="10,8 18,8 16,14 12,14" fill="#000" opacity="0.8"/>
+      <rect x="13" y="4" width="2" height="20" fill="#000" opacity="0.9"/>
+      <polygon points="8,10 20,10 18,12 10,12" fill="${color}" opacity="0.7"/>
     </svg>`;
   } else {
-    // Default commercial aircraft symbol
-    iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M12 2L14 8L20 10L14 12L12 22L10 12L4 10L10 8L12 2Z" fill="${color}" stroke="#000" stroke-width="1"/>
-      <circle cx="12" cy="12" r="1.5" fill="#000"/>
+    // Improved default commercial aircraft symbol
+    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
+      <path d="M14 2L16 8L24 10L16 12L14 26L12 12L4 10L12 8L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
+      <ellipse cx="14" cy="10" rx="10" ry="2.5" fill="${color}" opacity="0.6"/>
+      <rect x="13" y="7" width="2" height="14" fill="#000" opacity="0.8"/>
+      <circle cx="14" cy="14" r="1.5" fill="#000"/>
     </svg>`;
   }
   
   return new Icon({
     iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg),
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -12],
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
   });
 };
 
@@ -232,7 +238,7 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
   const [selectedAircraft, setSelectedAircraft] = React.useState<string | null>(null);
   const [mapCenter, setMapCenter] = React.useState<LatLngTuple>([TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]);
   const [mapZoom, setMapZoom] = React.useState(10);
-  const [maxRange, setMaxRange] = useLocalStorage('adsbDemoMaxRange', 250); // km
+  const [maxRange, setMaxRange] = useLocalStorage('adsbDemoMaxRange', 3); // km - default 3km
   const [minAltitude, setMinAltitude] = useLocalStorage('adsbDemoMinAltitude', 0); // feet
   const [maxAltitude, setMaxAltitude] = useLocalStorage('adsbDemoMaxAltitude', 50000); // feet
   const [showMilitary, setShowMilitary] = useLocalStorage('adsbDemoShowMilitary', true);
@@ -396,15 +402,14 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                 <Marker
                   position={[TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]}
                   icon={new Icon({
-                    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="16" cy="16" r="14" fill="none" stroke="#00d4ff" stroke-width="3" opacity="0.8"/>
-                      <circle cx="16" cy="16" r="8" fill="none" stroke="#00d4ff" stroke-width="2"/>
-                      <circle cx="16" cy="16" r="3" fill="#00d4ff"/>
-                      <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#00d4ff" stroke-width="2"/>
+                    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="12" cy="12" r="10" fill="#00d4ff" opacity="0.8"/>
+                      <circle cx="12" cy="12" r="6" fill="#ffffff"/>
+                      <circle cx="12" cy="12" r="2" fill="#00d4ff"/>
                     </svg>`),
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16],
-                    popupAnchor: [0, -16],
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12],
+                    popupAnchor: [0, -12],
                   })}
                 >
                   <Popup>
@@ -418,6 +423,13 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                     </div>
                   </Popup>
                 </Marker>
+                
+                {/* Detection Range Circle */}
+                <Circle
+                  center={[TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]}
+                  radius={maxRange * 1000} // Convert km to meters
+                  pathOptions={{ color: '#00d4ff', weight: 2, opacity: 0.6, fillOpacity: 0.1 }}
+                />
                 
                 {/* Aircraft Markers */}
                 {filteredAircraft.map((aircraft) => (
@@ -576,13 +588,13 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs lattice-text-secondary block mb-1">
-                      Maximum Range: {maxRange}km
+                      Detection Range: {maxRange}km
                     </label>
                     <input
                       type="range"
-                      min="10"
-                      max="500"
-                      step="10"
+                      min="1"
+                      max="50"
+                      step="1"
                       value={maxRange}
                       onChange={(e) => setMaxRange(parseInt(e.target.value))}
                       className="w-full accent-cyan-400"

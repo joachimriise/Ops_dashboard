@@ -1,23 +1,79 @@
-import React from 'react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
+import React, { useState, useEffect } from 'react';
+import { X, Layout as LayoutIcon, Grid3X3, Grid2X2, Radio, Target, Clock, Satellite, Wifi, WifiOff } from 'lucide-react';
+import { Layout } from 'react-grid-layout';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import GridLayout from './components/GridLayout';
 import Header, { GPSData } from './components/Header';
-import MapPanel from './components/MapPanel';
 import ADSBPanel from './components/ADSBPanel';
 import ADSBDemoPanel from './components/ADSBDemoPanel';
 import WeatherPanel from './components/WeatherPanel';
 import SpectrumPanel from './components/SpectrumPanel';
+import TacticalPanel from './components/TacticalPanel';
 import VideoPanel from './components/VideoPanel';
+import MapPanel from './components/MapPanel';
 import SoftwarePanel from './components/SoftwarePanel';
 import FlightLoggerPanel from './components/FlightLoggerPanel';
-import TacticalPanel from './components/TacticalPanel';
 import PanelSelector from './components/PanelSelector';
-import { useLocalStorage } from './hooks/useLocalStorage';
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+export interface GPSData {
+  connected: boolean;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  accuracy?: number;
+  satellites?: number;
+  fix_quality?: string;
+  hdop?: number;
+  speed?: number;
+  course?: number;
+  timestamp?: number;
+}
 
-type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'software' | 'flight-logger' | 'comms' | 'navigation' | 'sensors' | 'intel';
+interface Aircraft {
+  icao24: string;
+  callsign: string;
+  origin_country: string;
+  time_position: number;
+  last_contact: number;
+  longitude: number;
+  latitude: number;
+  baro_altitude: number;
+  on_ground: boolean;
+  velocity: number;
+  true_track: number;
+  vertical_rate: number;
+  geo_altitude: number;
+  source: 'opensky' | 'rtl-sdr';
+  signal_strength?: number;
+  last_seen?: number;
+  // Additional ADS-B Exchange fields
+  aircraft_type?: string;
+  registration?: string;
+  operator?: string;
+  squawk?: string;
+  emergency?: string;
+  spi?: boolean;
+  mlat?: boolean;
+  tisb?: boolean;
+  messages?: number;
+  seen?: number;
+  rssi?: number;
+}
+
+interface WeatherData {
+  temperature: number;
+  humidity: number;
+  pressure: number;
+  visibility: number;
+  wind_speed: number;
+  wind_direction: number;
+  wind_gust?: number;
+  weather_main: string;
+  weather_description: string;
+  clouds: number;
+  rain?: number;
+  snow?: number;
+}
 
 interface SpectrumData {
   frequency: number;
@@ -45,85 +101,704 @@ interface SpectrumConfig {
   enabled_bands: string[];
 }
 
-// Default layouts for different screen sizes
+interface ADSBSettings {
+  useGPS: boolean;
+  defaultLocation: { lat: number; lon: number; name: string };
+  radiusKm: number;
+}
+
+type PanelType = 'adsb' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'comms' | 'navigation' | 'sensors' | 'intel' | 'software' | 'flight-logger';
+
+interface PanelItem {
+  id: string;
+  type: PanelType;
+  title: string;
+}
+
+const defaultPanels: PanelItem[] = [
+  { id: 'panel-1', type: 'adsb', title: 'ADS-B SURVEILLANCE' },
+  { id: 'panel-2', type: 'spectrum', title: 'SPECTRUM ANALYZER' },
+  { id: 'panel-3', type: 'weather', title: 'WEATHER CONDITIONS' },
+  { id: 'panel-4', type: 'video', title: 'VIDEO SURVEILLANCE' }
+];
+
 const defaultLayouts = {
   lg: [
-    { i: 'panel-0', x: 0, y: 0, w: 8, h: 8 },
-    { i: 'panel-1', x: 8, y: 0, w: 8, h: 8 },
-    { i: 'panel-2', x: 0, y: 8, w: 8, h: 8 },
-    { i: 'panel-3', x: 8, y: 8, w: 8, h: 8 }
+    { i: 'panel-1', x: 0, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-2', x: 8, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-3', x: 0, y: 8, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-4', x: 8, y: 8, w: 8, h: 8, minW: 2, minH: 2 }
   ],
   md: [
-    { i: 'panel-0', x: 0, y: 0, w: 6, h: 6 },
-    { i: 'panel-1', x: 6, y: 0, w: 6, h: 6 },
-    { i: 'panel-2', x: 0, y: 6, w: 6, h: 6 },
-    { i: 'panel-3', x: 6, y: 6, w: 6, h: 6 }
+    { i: 'panel-1', x: 0, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-2', x: 8, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-3', x: 0, y: 8, w: 8, h: 8, minW: 2, minH: 2 },
+    { i: 'panel-4', x: 8, y: 8, w: 8, h: 8, minW: 2, minH: 2 }
   ],
   sm: [
-    { i: 'panel-0', x: 0, y: 0, w: 4, h: 4 },
-    { i: 'panel-1', x: 0, y: 4, w: 4, h: 4 },
-    { i: 'panel-2', x: 0, y: 8, w: 4, h: 4 },
-    { i: 'panel-3', x: 0, y: 12, w: 4, h: 4 }
+    { i: 'panel-1', x: 0, y: 0, w: 16, h: 4, minW: 2, minH: 2 },
+    { i: 'panel-2', x: 0, y: 4, w: 16, h: 4, minW: 2, minH: 2 },
+    { i: 'panel-3', x: 0, y: 8, w: 16, h: 4, minW: 2, minH: 2 },
+    { i: 'panel-4', x: 0, y: 12, w: 16, h: 4, minW: 2, minH: 2 }
   ]
 };
 
+// 16x16 Grid Layout Presets
+const gridPresets = {
+  '1x1': {
+    name: 'Single Panel',
+    description: 'One large panel',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 16, h: 16, minW: 2, minH: 2 }
+    ]
+  },
+  '1x2': {
+    name: 'Vertical Split',
+    description: 'Two panels stacked vertically',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 16, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-2', x: 0, y: 8, w: 16, h: 8, minW: 2, minH: 2 }
+    ]
+  },
+  '2x1': {
+    name: 'Horizontal Split',
+    description: 'Two panels side by side',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
+      { i: 'panel-2', x: 8, y: 0, w: 8, h: 16, minW: 2, minH: 2 }
+    ]
+  },
+  '2x2': {
+    name: 'Quad Layout',
+    description: 'Four equal panels',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-2', x: 8, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-3', x: 0, y: 8, w: 8, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-4', x: 8, y: 8, w: 8, h: 8, minW: 2, minH: 2 }
+    ]
+  },
+  'main-side': {
+    name: 'Main + Sidebar',
+    description: 'Large main panel with sidebar',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 12, h: 12, minW: 4, minH: 4 },
+      { i: 'panel-2', x: 12, y: 0, w: 4, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-3', x: 12, y: 6, w: 4, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-4', x: 0, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+      { i: 'panel-5', x: 4, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+      { i: 'panel-6', x: 8, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+      { i: 'panel-7', x: 12, y: 12, w: 4, h: 4, minW: 2, minH: 2 }
+    ]
+  },
+  'dashboard': {
+    name: 'Dashboard Layout',
+    description: 'Mixed panel sizes for dashboard',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 10, h: 8, minW: 4, minH: 4 },
+      { i: 'panel-2', x: 10, y: 0, w: 6, h: 4, minW: 2, minH: 2 },
+      { i: 'panel-3', x: 10, y: 4, w: 6, h: 4, minW: 2, minH: 2 },
+      { i: 'panel-4', x: 0, y: 8, w: 5, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-5', x: 5, y: 8, w: 5, h: 8, minW: 2, minH: 2 },
+      { i: 'panel-6', x: 10, y: 8, w: 6, h: 8, minW: 2, minH: 2 }
+    ]
+  },
+  '3x3': {
+    name: 'Nine Grid',
+    description: 'Nine equal panels',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 5, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-2', x: 5, y: 0, w: 6, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-3', x: 11, y: 0, w: 5, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-4', x: 0, y: 5, w: 5, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-5', x: 5, y: 5, w: 6, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-6', x: 11, y: 5, w: 5, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-7', x: 0, y: 11, w: 5, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-8', x: 5, y: 11, w: 6, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-9', x: 11, y: 11, w: 5, h: 5, minW: 2, minH: 2 }
+    ]
+  },
+  'monitoring': {
+    name: 'Monitoring Layout',
+    description: 'Large display with small monitoring panels',
+    layouts: [
+      { i: 'panel-1', x: 0, y: 0, w: 12, h: 10, minW: 6, minH: 6 },
+      { i: 'panel-2', x: 12, y: 0, w: 4, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-3', x: 12, y: 5, w: 4, h: 5, minW: 2, minH: 2 },
+      { i: 'panel-4', x: 0, y: 10, w: 3, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-5', x: 3, y: 10, w: 3, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-6', x: 6, y: 10, w: 3, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-7', x: 9, y: 10, w: 3, h: 6, minW: 2, minH: 2 },
+      { i: 'panel-8', x: 12, y: 10, w: 4, h: 6, minW: 2, minH: 2 }
+    ]
+  }
+};
+
+const generateGridLayout = (preset: keyof typeof gridPresets): { [key: string]: Layout[] } => {
+  const presetConfig = gridPresets[preset];
+  const layouts = presetConfig.layouts;
+
+  return {
+    lg: layouts,
+    md: layouts.map(l => ({ ...l, w: Math.max(2, Math.floor(l.w * 0.8)), h: Math.max(2, Math.floor(l.h * 0.8)) })),
+    sm: layouts.map((l, index) => ({ ...l, x: 0, y: index * 4, w: 16, h: 4 }))
+  };
+};
+
 export default function App() {
-  const [isLocked, setIsLocked] = useLocalStorage('dashboardLocked', true);
+  // Use localStorage for persistent state
+  const [aircraft, setAircraft] = useState<Aircraft[]>([]);
+  const [rtlSdrConnected, setRtlSdrConnected] = useState(false);
+  const [rtlSdrAircraft, setRtlSdrAircraft] = useState<Aircraft[]>([]);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLocation, setWeatherLocation] = useLocalStorage('weatherLocation', { 
+    lat: 59.9139, 
+    lon: 10.7522, 
+    name: 'Oslo, Norway' 
+  });
+  const [spectrumData, setSpectrumData] = useState<SpectrumData[]>([]);
+  const [droneSignals, setDroneSignals] = useState<DroneSignal[]>([]);
+  const [spectrumConnected, setSpectrumConnected] = useState(false);
+  const [spectrumConfigs, setSpectrumConfigs] = useLocalStorage('spectrumConfigs', {
+    'panel-1': {
+      center_freq: 2450,
+      span: 100,
+      rbw: 100,
+      sweep_time: 0.1,
+      gain: 20,
+      enabled_bands: ['2.4G', '5.8G', '900M', '433M']
+    },
+    'panel-2': {
+      center_freq: 5800,
+      span: 200,
+      rbw: 100,
+      sweep_time: 0.1,
+      gain: 20,
+      enabled_bands: ['5.8G']
+    },
+    'panel-3': {
+      center_freq: 433,
+      span: 10,
+      rbw: 50,
+      sweep_time: 0.1,
+      gain: 25,
+      enabled_bands: ['433M']
+    },
+    'panel-4': {
+      center_freq: 915,
+      span: 50,
+      rbw: 100,
+      sweep_time: 0.1,
+      gain: 20,
+      enabled_bands: ['900M']
+    }
+  });
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [lastWeatherUpdate, setLastWeatherUpdate] = useState<Date>(new Date());
+  const [lastRtlUpdate, setLastRtlUpdate] = useState<Date>(new Date());
+  const [lastSpectrumUpdate, setLastSpectrumUpdate] = useState<Date>(new Date());
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [isLoadingRtl, setIsLoadingRtl] = useState(false);
+  const [isLoadingSpectrum, setIsLoadingSpectrum] = useState(false);
+  const [demoAircraftPositions, setDemoAircraftPositions] = useState<Map<string, {lat: number, lon: number, alt: number, track: number, velocity: number}>>(new Map());
+  const [showGpsInfo, setShowGpsInfo] = useState(false);
+  const [panels, setPanels] = useLocalStorage('dashboardPanels', defaultPanels);
   const [layouts, setLayouts] = useLocalStorage('dashboardLayouts', defaultLayouts);
-  const [selectedPanel, setSelectedPanel] = useLocalStorage<PanelType>('selectedPanel', 'map');
-  const [showPanelSelector, setShowPanelSelector] = React.useState(false);
-  const [selectingPanelIndex, setSelectingPanelIndex] = React.useState<number | null>(null);
+  const [isLayoutLocked, setIsLayoutLocked] = useLocalStorage('layoutLocked', true);
+  const [selectingPanel, setSelectingPanel] = useState<string | null>(null);
+  const [currentGridPreset, setCurrentGridPreset] = useLocalStorage<keyof typeof gridPresets>('gridPreset', '2x2');
+  const [showGridSelector, setShowGridSelector] = useState(false);
+  const [adsbSettings, setAdsbSettings] = useLocalStorage('adsbSettings', {
+    useGPS: false,
+    defaultLocation: { lat: 59.9139, lon: 10.7522, name: 'Oslo, Norway' },
+    radiusKm: 10
+  });
+  const [gpsData, setGpsData] = React.useState<GPSData>({
+    connected: false,
+    latitude: 59.9139,
+    longitude: 10.7522,
+    altitude: 0,
+    accuracy: 0,
+    satellites: 0,
+    fix_quality: 'NO_FIX',
+    timestamp: Date.now()
+  });
+  const [isOnline, setIsOnline] = React.useState(navigator.onLine);
+  const [isLocked, setIsLocked] = useLocalStorage('isLocked', false);
   const [showTimeModal, setShowTimeModal] = React.useState(false);
   const [showGpsModal, setShowGpsModal] = React.useState(false);
   const [showNetworkModal, setShowNetworkModal] = React.useState(false);
   const [showViewportInfo, setShowViewportInfo] = React.useState(false);
-  const [showGridSelector, setShowGridSelector] = React.useState(false);
-  const [gridSize, setGridSize] = useLocalStorage('gridSize', 4);
-  
-  // Panel configuration
-  const [panelTypes, setPanelTypes] = useLocalStorage<PanelType[]>('panelTypes', ['map', 'adsb', 'weather', 'spectrum']);
-
-  // GPS simulation
-  const [gpsData, setGpsData] = React.useState<GPSData>({
-    connected: true,
-    latitude: 59.9139,
-    longitude: 10.7522,
-    altitude: 15,
-    accuracy: 3.2,
-    satellites: 8,
-    fix_quality: '3D',
-    hdop: 1.1,
-    speed: 0,
-    course: 0,
-    timestamp: Date.now()
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [networkInfo, setNetworkInfo] = useState({
+    ipAddress: 'Detecting...',
+    publicIp: 'Detecting...',
+    connectionType: 'Unknown',
+    effectiveType: 'Unknown',
+    downlink: 0,
+    rtt: 0,
+    onlineSince: new Date(),
+    downtime: 0,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    cookieEnabled: navigator.cookieEnabled,
+    javaEnabled: false,
+    screenResolution: `${screen.width}x${screen.height}`,
+    colorDepth: screen.colorDepth,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezoneOffset: new Date().getTimezoneOffset()
+  });
+  const [viewportDimensions, setViewportDimensions] = React.useState({
+    width: window.innerWidth,
+    height: window.innerHeight
   });
 
-  // Weather location
-  const [weatherLocation, setWeatherLocation] = useLocalStorage('weatherLocation', {
-    lat: 59.9139,
-    lon: 10.7522,
-    name: 'Oslo, Norway'
-  });
+  // Helper functions for weather symbol parsing
+  const getWeatherMain = (symbolCode: string): string => {
+    if (symbolCode.includes('rain')) return 'Rain';
+    if (symbolCode.includes('snow')) return 'Snow';
+    if (symbolCode.includes('sleet')) return 'Sleet';
+    if (symbolCode.includes('fog')) return 'Fog';
+    if (symbolCode.includes('cloudy')) return 'Clouds';
+    if (symbolCode.includes('partlycloudy')) return 'Clouds';
+    if (symbolCode.includes('fair')) return 'Clear';
+    if (symbolCode.includes('clearsky')) return 'Clear';
+    return 'Clear';
+  };
 
-  // Network status
-  const [isOnline, setIsOnline] = React.useState(navigator.onLine);
+  const getWeatherDescription = (symbolCode: string): string => {
+    const symbolMap: { [key: string]: string } = {
+      'clearsky_day': 'clear sky',
+      'clearsky_night': 'clear sky',
+      'fair_day': 'fair',
+      'fair_night': 'fair',
+      'partlycloudy_day': 'partly cloudy',
+      'partlycloudy_night': 'partly cloudy',
+      'cloudy': 'cloudy',
+      'rainshowers_day': 'light rain showers',
+      'rainshowers_night': 'light rain showers',
+      'rainshowersandthunder_day': 'rain showers and thunder',
+      'rainshowersandthunder_night': 'rain showers and thunder',
+      'sleetshowers_day': 'sleet showers',
+      'sleetshowers_night': 'sleet showers',
+      'snowshowers_day': 'snow showers',
+      'snowshowers_night': 'snow showers',
+      'rain': 'rain',
+      'heavyrain': 'heavy rain',
+      'heavyrainandthunder': 'heavy rain and thunder',
+      'sleet': 'sleet',
+      'snow': 'snow',
+      'snowandthunder': 'snow and thunder',
+      'fog': 'fog',
+      'sleetshowersandthunder_day': 'sleet showers and thunder',
+      'sleetshowersandthunder_night': 'sleet showers and thunder',
+      'snowshowersandthunder_day': 'snow showers and thunder',
+      'snowshowersandthunder_night': 'snow showers and thunder',
+      'rainandthunder': 'rain and thunder',
+      'sleetandthunder': 'sleet and thunder'
+    };
+    
+    return symbolMap[symbolCode] || symbolCode.replace(/_/g, ' ');
+  };
 
-  // Spectrum data simulation
-  const [spectrumData, setSpectrumData] = React.useState<SpectrumData[]>([]);
-  const [droneSignals, setDroneSignals] = React.useState<DroneSignal[]>([]);
-  const [spectrumConnected, setSpectrumConnected] = React.useState(true);
-  const [spectrumConfig, setSpectrumConfig] = useLocalStorage<SpectrumConfig>('spectrumConfig', {
-    center_freq: 2450,
-    span: 100,
-    rbw: 10,
-    sweep_time: 0.1,
-    gain: 20,
-    enabled_bands: ['2.4G', '5.8G']
-  });
-  const [lastSpectrumUpdate, setLastSpectrumUpdate] = React.useState<Date>(new Date());
-  const [isLoadingSpectrum, setIsLoadingSpectrum] = React.useState(false);
+  // Monitor network connectivity
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleShowGridSelector = () => setShowGridSelector(true);
+    const handleResetLayout = () => resetLayout();
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('showGridSelector', handleShowGridSelector);
+    window.addEventListener('resetLayout', handleResetLayout);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('showGridSelector', handleShowGridSelector);
+      window.removeEventListener('resetLayout', handleResetLayout);
+    };
+  }, []);
 
-  // Network status monitoring
+  // Update time every second
+  useEffect(() => {
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timeInterval);
+  }, []);
+
+  // Fetch network information
+  const fetchNetworkInfo = async () => {
+    try {
+      // Try to get local IP first
+      try {
+        const localIpResponse = await fetch('http://localhost:8080/api/network-info', {
+          signal: AbortSignal.timeout(2000)
+        });
+        if (localIpResponse.ok) {
+          const localData = await localIpResponse.json();
+          setNetworkInfo(prev => ({ 
+            ...prev, 
+            ipAddress: localData.localIp || 'Unavailable'
+          }));
+        }
+      } catch (error) {
+        // Fallback to detecting local IP via WebRTC
+        try {
+          const pc = new RTCPeerConnection({iceServers: []});
+          pc.createDataChannel('');
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          
+          pc.onicecandidate = (ice) => {
+            if (ice && ice.candidate && ice.candidate.candidate) {
+              const candidate = ice.candidate.candidate;
+              const ipMatch = candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+              if (ipMatch) {
+                setNetworkInfo(prev => ({ ...prev, ipAddress: ipMatch[1] }));
+                pc.close();
+              }
+            }
+          };
+        } catch (webrtcError) {
+          setNetworkInfo(prev => ({ ...prev, ipAddress: 'Unavailable' }));
+        }
+      }
+
+      // Try to get public IP
+      const ipResponse = await fetch('https://api.ipify.org?format=json', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (ipResponse.ok) {
+        const ipData = await ipResponse.json();
+        setNetworkInfo(prev => ({ ...prev, publicIp: ipData.ip }));
+      }
+    } catch (error) {
+      setNetworkInfo(prev => ({ ...prev, publicIp: 'Unavailable' }));
+    }
+
+    // Get connection info if available
+    if ('connection' in navigator) {
+      const connection = (navigator as any).connection;
+      setNetworkInfo(prev => ({ 
+        ...prev, 
+        connectionType: connection.type || 'Unknown',
+        effectiveType: connection.effectiveType || 'Unknown',
+        downlink: connection.downlink || 0,
+        rtt: connection.rtt || 0
+      }));
+    }
+
+    // Check Java support
+    try {
+      setNetworkInfo(prev => ({ 
+        ...prev, 
+        javaEnabled: navigator.javaEnabled ? navigator.javaEnabled() : false
+      }));
+    } catch (error) {
+      setNetworkInfo(prev => ({ ...prev, javaEnabled: false }));
+    }
+  };
+
+  // Monitor network connectivity and fetch info
+  useEffect(() => {
+    const handleOnlineStatus = () => {
+      setIsOnline(true);
+      setNetworkInfo(prev => ({ ...prev, onlineSince: new Date() }));
+    };
+    const handleOfflineStatus = () => {
+      setIsOnline(false);
+      setNetworkInfo(prev => ({ ...prev, downtime: prev.downtime + 1 }));
+    };
+    
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOfflineStatus);
+    
+    // Initial network info fetch
+    if (isOnline) {
+      fetchNetworkInfo();
+    }
+    
+    return () => {
+      window.removeEventListener('online', handleOnlineStatus);
+      window.removeEventListener('offline', handleOfflineStatus);
+    };
+  }, []);
+
+  // Fetch GPS data
+  const fetchGPSData = async () => {
+    try {
+      // Try to connect to local GPS daemon (gpsd) or similar service
+      const response = await fetch('http://localhost:2947/gps', {
+        signal: AbortSignal.timeout(2000)
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setGpsData({
+          connected: true,
+          latitude: data.lat,
+          longitude: data.lon,
+          altitude: data.alt,
+          accuracy: data.accuracy,
+          satellites: data.satellites,
+          fix_quality: data.fix_quality || '3D',
+          hdop: data.hdop,
+          speed: data.speed,
+          course: data.course,
+          timestamp: Date.now()
+        });
+      } else {
+        throw new Error('GPS service not available');
+      }
+    } catch (error) {
+      // No GPS available - set disconnected state
+      setGpsData({ connected: false });
+    }
+  };
+
+  const fetchAircraftData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Determine center position for API query
+      const centerLat = adsbSettings.useGPS 
+        ? adsbSettings.defaultLocation.lat 
+        : adsbSettings.defaultLocation.lat ?? 59.9139;
+      const centerLon = adsbSettings.useGPS 
+        ? adsbSettings.defaultLocation.lon 
+        : Number(adsbSettings.defaultLocation?.lon ?? 10.7522);
+      
+      // Calculate bounding box based on radius
+      const radiusInDegrees = adsbSettings.radiusKm / 111; // Approximate km to degrees conversion
+      
+      // Fetch live data from OpenSky Network API (with offline fallback)
+      let onlineAircraft: Aircraft[] = [];
+      
+      // Only attempt online fetch if connected
+      if (isOnline) {
+        // OpenSky API temporarily disabled due to rate limiting (HTTP 429)
+        console.log('OpenSky API disabled - using RTL-SDR data only');
+      }
+      
+      // Combine online and RTL-SDR aircraft data
+      const combinedAircraft = [...onlineAircraft, ...rtlSdrAircraft];
+      
+      setAircraft(combinedAircraft);
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error('Error in fetchAircraftData:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchWeatherData = async () => {
+    try {
+      setIsLoadingWeather(true);
+      
+      // Use Yr.no API (Norwegian Meteorological Institute)
+      const response = await fetch(`/api/yr/locationforecast/2.0/compact?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`, {
+        signal: AbortSignal.timeout(10000),
+        headers: {
+          'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+
+        // Using MET Norway API
+        const response2 = await fetch(
+          `/api/metno/weatherapi/locationforecast/2.0/compact?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`
+        );
+
+        if (!response2.ok) {
+          throw new Error('Weather data not available');
+        }
+
+        const data2 = await response2.json();
+        
+        // Parse MET Norway data structure
+        const currentData = data2.properties.timeseries[0];
+        const instant = currentData.data.instant.details;
+        const next1h = currentData.data.next_1_hours?.details;
+        const next6h = currentData.data.next_6_hours?.details;
+        
+        // Get precipitation data from next hour if available
+        const precipitation = next1h?.precipitation_amount || 0;
+        
+        // Get weather symbol from next 1h or 6h forecast
+        const weatherSymbol = currentData.data.next_1_hours?.summary?.symbol_code || 
+                             currentData.data.next_6_hours?.summary?.symbol_code || 
+                             'clearsky_day';
+        
+        // Convert weather symbol to description
+        const getWeatherDescription = (symbol: string): { main: string; description: string } => {
+          if (symbol.includes('rain')) return { main: 'Rain', description: 'rainy' };
+          if (symbol.includes('snow')) return { main: 'Snow', description: 'snowy' };
+          if (symbol.includes('sleet')) return { main: 'Sleet', description: 'sleet' };
+          if (symbol.includes('fog')) return { main: 'Fog', description: 'foggy' };
+          if (symbol.includes('cloudy')) return { main: 'Clouds', description: 'cloudy' };
+          if (symbol.includes('partlycloudy')) return { main: 'Clouds', description: 'partly cloudy' };
+          if (symbol.includes('fair')) return { main: 'Clear', description: 'fair' };
+          if (symbol.includes('clearsky')) return { main: 'Clear', description: 'clear sky' };
+          return { main: 'Clear', description: 'clear' };
+        };
+        
+        const weatherDesc = getWeatherDescription(weatherSymbol);
+        
+        setWeather({
+          temperature: instant.air_temperature,
+          humidity: instant.relative_humidity,
+          pressure: instant.air_pressure_at_sea_level,
+          visibility: instant.fog_area_fraction ? (1 - instant.fog_area_fraction / 100) * 10 : 10, // Estimate visibility from fog
+          wind_speed: instant.wind_speed * 3.6, // Convert m/s to km/h
+          wind_direction: instant.wind_from_direction,
+          wind_gust: instant.wind_speed_of_gust ? instant.wind_speed_of_gust * 3.6 : undefined,
+          weather_main: weatherDesc.main,
+          weather_description: weatherDesc.description,
+          clouds: instant.cloud_area_fraction || 0,
+          rain: precipitation > 0 && weatherSymbol.includes('rain') ? precipitation : undefined,
+          snow: precipitation > 0 && weatherSymbol.includes('snow') ? precipitation : undefined
+        });
+        
+        setLastWeatherUpdate(new Date());
+      }
+    } catch (error) {
+      console.error('Error fetching weather data:', error);
+      // Don't set any weather data on error - let UI show loading/error state
+      setWeather(null);
+    } finally {
+      setIsLoadingWeather(false);
+    }
+  };
+
+  const simulateSpectrumData = () => {
+    setIsLoadingSpectrum(true);
+    
+    // Generate spectrum data
+    const newSpectrumData: SpectrumData[] = [];
+    const newDroneSignals: DroneSignal[] = [];
+    
+    // Generate spectrum data for all frequency ranges
+    Object.values(spectrumConfigs).forEach(config => {
+      for (let i = 0; i < 1000; i++) {
+        const freq = config.center_freq - config.span/2 + (i * config.span / 1000);
+        newSpectrumData.push({
+          frequency: freq,
+          power: -80 + Math.random() * 20,
+          bandwidth: config.rbw,
+          timestamp: Date.now()
+        });
+      }
+    });
+    
+    // Add some drone signals based on all enabled bands
+    Object.values(spectrumConfigs).forEach(config => {
+      config.enabled_bands.forEach(band => {
+        if (Math.random() > 0.7) { // 30% chance of signal in each band
+          let centerFreq = 2450;
+          let protocol = 'Unknown';
+          
+          switch (band) {
+            case '433M':
+              centerFreq = 433 + Math.random() * 10;
+              protocol = 'LoRa/Telemetry';
+              break;
+            case '900M':
+              centerFreq = 915 + Math.random() * 20;
+              protocol = 'Long Range Control';
+              break;
+            case '2.4G':
+              centerFreq = 2400 + Math.random() * 100;
+              protocol = Math.random() > 0.5 ? 'WiFi/RC Control' : 'Bluetooth';
+              break;
+            case '5.8G':
+              centerFreq = 5800 + Math.random() * 200;
+              protocol = 'FPV Video';
+              break;
+          }
+          
+          newDroneSignals.push({
+            frequency: centerFreq,
+            power: -40 + Math.random() * 20,
+            bandwidth: 1 + Math.random() * 5,
+            protocol,
+            confidence: 60 + Math.random() * 40,
+            duration: 1 + Math.random() * 30,
+            last_seen: Date.now()
+          });
+        }
+      });
+    });
+    
+    setSpectrumData(newSpectrumData);
+    setDroneSignals(newDroneSignals);
+    setLastSpectrumUpdate(new Date());
+    
+    setTimeout(() => setIsLoadingSpectrum(false), 1000);
+  };
+
+  const handleSpectrumConfigChange = (panelId: string, config: SpectrumConfig) => {
+    setSpectrumConfigs(prev => ({
+      ...prev,
+      [panelId]: config
+    }));
+  };
+
+  const getSpectrumConfig = (panelId: string): SpectrumConfig => {
+    return spectrumConfigs[panelId] || {
+      center_freq: 2450,
+      span: 100,
+      rbw: 100,
+      sweep_time: 0.1,
+      gain: 20,
+      enabled_bands: ['2.4G']
+    };
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchAircraftData();
+    fetchWeatherData();
+    fetchGPSData();
+    simulateSpectrumData();
+  }, []);
+
+  // Periodic updates
+  useEffect(() => {
+    const aircraftInterval = setInterval(fetchAircraftData, 300000); // Every 5 minutes
+    const weatherInterval = setInterval(fetchWeatherData, 300000); // Every 5 minutes
+    const gpsInterval = setInterval(fetchGPSData, 5000); // Every 5 seconds
+    const spectrumInterval = setInterval(simulateSpectrumData, 2000); // Every 2 seconds
+
+    return () => {
+      clearInterval(aircraftInterval);
+      clearInterval(weatherInterval);
+      clearInterval(gpsInterval);
+      clearInterval(spectrumInterval);
+    };
+  }, [weatherLocation, adsbSettings, spectrumConfigs]);
+
+  // Simulate GPS data updates
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setGpsData(prev => ({
+        ...prev,
+        timestamp: Date.now()
+      }));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle online/offline status
   React.useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -137,150 +812,72 @@ export default function App() {
     };
   }, []);
 
-  // GPS simulation
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setGpsData(prev => ({
-        ...prev,
-        timestamp: Date.now(),
-        satellites: Math.max(4, Math.min(12, prev.satellites! + (Math.random() - 0.5) * 2)),
-        hdop: Math.max(0.8, Math.min(3.0, prev.hdop! + (Math.random() - 0.5) * 0.2)),
-        accuracy: Math.max(1.0, Math.min(10.0, prev.accuracy! + (Math.random() - 0.5) * 0.5))
-      }));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Spectrum data simulation
-  React.useEffect(() => {
-    const generateSpectrumData = () => {
-      const data: SpectrumData[] = [];
-      const signals: DroneSignal[] = [];
-      
-      // Generate spectrum data points
-      for (let i = 0; i < 1000; i++) {
-        const freq = spectrumConfig.center_freq - spectrumConfig.span/2 + (i * spectrumConfig.span / 1000);
-        const power = -80 + Math.random() * 20;
-        
-        data.push({
-          frequency: freq,
-          power,
-          bandwidth: spectrumConfig.rbw,
-          timestamp: Date.now()
-        });
-      }
-      
-      // Generate some drone signals
-      if (Math.random() > 0.7) {
-        const protocols = ['WiFi 2.4GHz', 'DJI OcuSync', 'Custom 2.4GHz', 'Bluetooth', 'RC Control'];
-        const protocol = protocols[Math.floor(Math.random() * protocols.length)];
-        
-        signals.push({
-          frequency: spectrumConfig.center_freq + (Math.random() - 0.5) * spectrumConfig.span * 0.8,
-          power: -40 + Math.random() * 20,
-          bandwidth: 5 + Math.random() * 15,
-          protocol,
-          confidence: 60 + Math.random() * 40,
-          duration: Math.random() * 30,
-          last_seen: Date.now()
-        });
-      }
-      
-      setSpectrumData(data);
-      setDroneSignals(signals);
-      setLastSpectrumUpdate(new Date());
-    };
-
-    generateSpectrumData();
-    const interval = setInterval(generateSpectrumData, 2000);
-
-    return () => clearInterval(interval);
-  }, [spectrumConfig]);
-
-  // Event listeners for grid controls
-  React.useEffect(() => {
-    const handleShowGridSelector = () => setShowGridSelector(true);
-    const handleResetLayout = () => {
-      setLayouts(defaultLayouts);
-    };
-
-    window.addEventListener('showGridSelector', handleShowGridSelector);
-    window.addEventListener('resetLayout', handleResetLayout);
-
-    return () => {
-      window.removeEventListener('showGridSelector', handleShowGridSelector);
-      window.removeEventListener('resetLayout', handleResetLayout);
-    };
-  }, [setLayouts]);
-
-  // Keyboard shortcuts
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowPanelSelector(false);
-        setShowTimeModal(false);
-        setShowGpsModal(false);
-        setShowNetworkModal(false);
-        setShowViewportInfo(false);
-        setShowGridSelector(false);
-        setSelectingPanelIndex(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const handleLayoutChange = (layout: Layout[], layouts: { [key: string]: Layout[] }) => {
     setLayouts(layouts);
   };
 
-  const handlePanelHeaderClick = (index: number) => {
-    if (!isLocked) {
-      setSelectingPanelIndex(index);
-      setShowPanelSelector(true);
+  const handlePanelHeaderClick = (panelId: string) => {
+    setSelectingPanel(panelId);
+  };
+
+  const handlePanelTypeSelect = (panelType: PanelType) => {
+    if (selectingPanel) {
+      setPanels(prev => prev.map(panel => 
+        panel.id === selectingPanel 
+          ? { ...panel, type: panelType, title: getPanelTitle(panelType) }
+          : panel
+      ));
+      setSelectingPanel(null);
     }
   };
 
-  const handlePanelSelect = (panelType: PanelType) => {
-    if (selectingPanelIndex !== null) {
-      const newPanelTypes = [...panelTypes];
-      newPanelTypes[selectingPanelIndex] = panelType;
-      setPanelTypes(newPanelTypes);
-    } else {
-      setSelectedPanel(panelType);
-    }
-    setShowPanelSelector(false);
-    setSelectingPanelIndex(null);
+  const getPanelTitle = (type: PanelType): string => {
+    const titles = {
+      adsb: 'ADS-B SURVEILLANCE',
+      weather: 'WEATHER CONDITIONS',
+      spectrum: 'SPECTRUM ANALYZER',
+      tactical: 'TACTICAL DISPLAY',
+      video: 'VIDEO SURVEILLANCE',
+      map: 'TACTICAL MAP',
+      software: 'SOFTWARE STATUS',
+      'flight-logger': 'FLIGHT LOGGER',
+      comms: 'COMMUNICATIONS',
+      navigation: 'NAVIGATION',
+      sensors: 'SENSORS',
+      intel: 'INTELLIGENCE'
+    };
+    return titles[type];
   };
 
-  const handleGridSizeChange = (size: number) => {
-    setGridSize(size);
-    const newPanelTypes = Array(size).fill(null).map((_, i) => 
-      panelTypes[i] || (['map', 'adsb', 'weather', 'spectrum', 'tactical', 'video', 'software', 'flight-logger'][i] || 'map')
-    );
-    setPanelTypes(newPanelTypes);
-    setShowGridSelector(false);
-  };
-
-  const renderPanel = (panelType: PanelType, index: number, isSelecting: boolean = false) => {
+  const renderPanel = (panel: PanelItem) => {
     const commonProps = {
-      onHeaderClick: () => handlePanelHeaderClick(index),
-      isSelecting
+      onHeaderClick: () => handlePanelHeaderClick(panel.id),
+      isSelecting: selectingPanel === panel.id
     };
 
-    switch (panelType) {
-      case 'map':
-        return <MapPanel {...commonProps} gpsData={gpsData} />;
+    switch (panel.type) {
       case 'adsb':
-        return <ADSBPanel {...commonProps} gpsData={gpsData} />;
-      case 'adsb-demo':
-        return <ADSBDemoPanel {...commonProps} gpsData={gpsData} />;
+        return (
+          <ADSBPanel
+            {...commonProps}
+            aircraft={aircraft}
+            rtlSdrConnected={rtlSdrConnected}
+            lastUpdate={lastUpdate}
+            lastRtlUpdate={lastRtlUpdate}
+            isLoading={isLoading}
+            isLoadingRtl={isLoadingRtl}
+            gpsData={gpsData}
+            adsbSettings={adsbSettings}
+            onSettingsChange={setAdsbSettings}
+          />
+        );
       case 'weather':
         return (
-          <WeatherPanel 
-            {...commonProps} 
+          <WeatherPanel
+            {...commonProps}
+            weather={weather}
+            lastWeatherUpdate={lastWeatherUpdate}
+            isLoadingWeather={isLoadingWeather}
             weatherLocation={weatherLocation}
             onLocationChange={setWeatherLocation}
           />
@@ -292,119 +889,279 @@ export default function App() {
             spectrumData={spectrumData}
             droneSignals={droneSignals}
             spectrumConnected={spectrumConnected}
-            spectrumConfig={spectrumConfig}
+            spectrumConfig={getSpectrumConfig(panel.id)}
             lastSpectrumUpdate={lastSpectrumUpdate}
             isLoadingSpectrum={isLoadingSpectrum}
-            onConfigChange={setSpectrumConfig}
-            panelId={`spectrum-${index}`}
+            onConfigChange={(config) => handleSpectrumConfigChange(panel.id, config)}
           />
         );
       case 'tactical':
         return <TacticalPanel {...commonProps} />;
       case 'video':
         return <VideoPanel {...commonProps} />;
+      case 'map':
+        return (
+          <MapPanel
+            {...commonProps}
+            gpsData={gpsData}
+          />
+        );
       case 'software':
         return <SoftwarePanel {...commonProps} />;
       case 'flight-logger':
         return <FlightLoggerPanel {...commonProps} />;
       default:
         return (
-          <div className="lattice-panel flex items-center justify-center h-full">
-            <div className="text-center lattice-text-muted">
-              <div className="text-lg font-semibold mb-2">Panel Coming Soon</div>
-              <div className="text-sm">This panel is under development</div>
+          <div className="lattice-panel flex flex-col h-full">
+            <div className="lattice-header px-4 py-3 cursor-pointer" onClick={commonProps.onHeaderClick}>
+              <span className="text-sm font-semibold lattice-text-primary">{panel.title}</span>
+            </div>
+            <div className="p-4 flex-1 flex items-center justify-center">
+              <div className="text-center lattice-text-muted">
+                <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>Panel coming soon</p>
+              </div>
             </div>
           </div>
         );
     }
   };
 
+  const applyGridPreset = (preset: keyof typeof gridPresets) => {
+    const newLayouts = generateGridLayout(preset);
+    const panelCount = gridPresets[preset].layouts.length;
+    
+    // Adjust panels array to match preset
+    const newPanels = [...panels];
+    while (newPanels.length < panelCount) {
+      newPanels.push({
+        id: `panel-${newPanels.length + 1}`,
+        type: 'tactical',
+        title: 'TACTICAL DISPLAY'
+      });
+    }
+    while (newPanels.length > panelCount) {
+      newPanels.pop();
+    }
+    
+    setPanels(newPanels);
+    setLayouts(newLayouts);
+    setCurrentGridPreset(preset);
+    setShowGridSelector(false);
+  };
+
+  const resetLayout = () => {
+    setLayouts(defaultLayouts);
+    setPanels([
+      { id: 'panel-1', type: 'adsb', title: 'ADS-B SURVEILLANCE' },
+      { id: 'panel-2', type: 'weather', title: 'WEATHER CONDITIONS' },
+      { id: 'panel-3', type: 'spectrum', title: 'SPECTRUM ANALYZER' },
+      { id: 'panel-4', type: 'video', title: 'VIDEO SURVEILLANCE' }
+    ]);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
       <Header
         gpsData={gpsData}
         isOnline={isOnline}
-        isLocked={isLocked}
-        onToggleLock={() => setIsLocked(!isLocked)}
+        isLocked={isLayoutLocked}
+        onToggleLock={() => setIsLayoutLocked(!isLayoutLocked)}
         onShowTimeModal={() => setShowTimeModal(true)}
         onShowGpsModal={() => setShowGpsModal(true)}
         onShowNetworkModal={() => setShowNetworkModal(true)}
         onShowViewportInfo={() => setShowViewportInfo(true)}
       />
 
-      <main className="h-[calc(100vh-80px)]">
-        {isLocked ? (
-          // Single panel view when locked
-          <div className="h-full p-4">
-            {renderPanel(selectedPanel, 0)}
-          </div>
-        ) : (
-          // Grid layout when unlocked
-          <div className="h-full p-4">
-            <ResponsiveGridLayout
-              className="layout"
-              layouts={layouts}
-              onLayoutChange={handleLayoutChange}
-              breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-              cols={{ lg: 16, md: 12, sm: 4 }}
-              rowHeight={30}
-              isDraggable={!isLocked}
-              isResizable={!isLocked}
-              margin={[8, 8]}
-              containerPadding={[0, 0]}
-            >
-              {Array.from({ length: gridSize }, (_, i) => (
-                <div key={`panel-${i}`}>
-                  {renderPanel(panelTypes[i] || 'map', i, selectingPanelIndex === i)}
-                </div>
-              ))}
-            </ResponsiveGridLayout>
-          </div>
-        )}
-      </main>
+      {/* Main Dashboard */}
+      <div className="h-[calc(100vh-80px)] flex flex-col">
+        <GridLayout
+          layouts={layouts}
+          onLayoutChange={handleLayoutChange}
+          isLocked={true}
+          className="flex-1"
+        >
+          {panels.map((panel) => (
+            <div key={panel.id} className="h-full">
+              {renderPanel(panel)}
+            </div>
+          ))}
+        </GridLayout>
+      </div>
 
       {/* Panel Selector Modal */}
-      {showPanelSelector && (
+      {selectingPanel && (
         <PanelSelector
-          onSelect={handlePanelSelect}
-          onClose={() => {
-            setShowPanelSelector(false);
-            setSelectingPanelIndex(null);
-          }}
-          currentPanel={selectingPanelIndex !== null ? panelTypes[selectingPanelIndex] : selectedPanel}
+          onSelect={handlePanelTypeSelect}
+          onClose={() => setSelectingPanel(null)}
+          currentPanel={panels.find(p => p.id === selectingPanel)?.type || 'tactical'}
         />
+      )}
+
+      {/* Grid Selector Modal */}
+      {showGridSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <Grid3X3 className="h-5 w-5 lattice-status-primary" />
+                <h2 className="text-lg font-semibold lattice-text-primary">Grid Layout</h2>
+              </div>
+              <button
+                onClick={() => setShowGridSelector(false)}
+                className="lattice-text-muted hover:lattice-text-primary transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(gridPresets).map(([key, preset]) => (
+                <button
+                  key={key}
+                  onClick={() => applyGridPreset(key as keyof typeof gridPresets)}
+                  className={`p-4 rounded border-2 text-left transition-all ${
+                    currentGridPreset === key
+                      ? 'border-cyan-400 bg-cyan-900/20 lattice-glow'
+                      : 'lattice-panel hover:border-cyan-400 hover:lattice-glow'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <Grid2X2 className="h-6 w-6 lattice-status-primary" />
+                    <div>
+                      <div className="font-semibold text-sm lattice-text-primary">
+                        {preset.name}
+                      </div>
+                      <div className="text-xs lattice-text-secondary">
+                        {preset.description}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Time Modal */}
       {showTimeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold lattice-text-primary">World Time</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <div className="lattice-panel-elevated p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto lattice-scrollbar">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <Clock className="h-5 w-5 lattice-status-primary" />
+                <h2 className="text-lg font-semibold lattice-text-primary">Time Information</h2>
+              </div>
               <button
                 onClick={() => setShowTimeModal(false)}
                 className="lattice-text-muted hover:lattice-text-primary transition-colors"
               >
-                ×
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              {[
-                { name: 'Local', time: new Date().toLocaleTimeString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-                { name: 'Zulu (UTC)', time: new Date().toUTCString().split(' ')[4], timezone: 'UTC' },
-                { name: 'New York', time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York' }), timezone: 'EST/EDT' },
-                { name: 'London', time: new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/London' }), timezone: 'GMT/BST' },
-                { name: 'Tokyo', time: new Date().toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' }), timezone: 'JST' },
-                { name: 'Sydney', time: new Date().toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney' }), timezone: 'AEST/AEDT' }
-              ].map((location) => (
-                <div key={location.name} className="flex justify-between items-center">
-                  <span className="lattice-text-secondary">{location.name}</span>
-                  <div className="text-right">
-                    <div className="lattice-text-primary font-semibold">{location.time}</div>
-                    <div className="text-xs lattice-text-muted">{location.timezone}</div>
-                  </div>
+
+            <div className="space-y-4">
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Local Time</div>
+                <div className="text-2xl font-bold lattice-text-primary mb-1">
+                  {currentTime.toLocaleTimeString()}
                 </div>
-              ))}
+                <div className="text-sm lattice-text-secondary">
+                  {currentTime.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </div>
+                <div className="text-xs lattice-text-muted mt-1">
+                  {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                </div>
+              </div>
+
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Zulu Time (UTC)</div>
+                <div className="text-2xl font-bold lattice-text-primary mb-1">
+                  {currentTime.toUTCString().split(' ')[4]} UTC
+                </div>
+                <div className="text-sm lattice-text-secondary">
+                  {currentTime.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    timeZone: 'UTC'
+                  })}
+                </div>
+                <div className="text-xs lattice-text-muted mt-1">
+                  Coordinated Universal Time
+                </div>
+              </div>
+
+              {/* World Times Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">New York</div>
+                  <div className="text-lg font-bold lattice-text-primary">
+                    {currentTime.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">EST/EDT</div>
+                </div>
+
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">London</div>
+                  <div className="text-lg font-bold lattice-text-primary">
+                    {currentTime.toLocaleTimeString('en-GB', { timeZone: 'Europe/London' })}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">GMT/BST</div>
+                </div>
+
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">Tokyo</div>
+                  <div className="text-lg font-bold lattice-text-primary">
+                    {currentTime.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">JST</div>
+                </div>
+
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">Sydney</div>
+                  <div className="text-lg font-bold lattice-text-primary">
+                    {currentTime.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney' })}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">AEST/AEDT</div>
+                </div>
+              </div>
+
+              {/* Military Time and Julian Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">Military Time</div>
+                  <div className="text-lg font-bold lattice-text-primary lattice-text-mono">
+                    {currentTime.toLocaleTimeString('en-GB', { hour12: false })}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">24-hour format</div>
+                </div>
+
+                <div className="lattice-panel p-3">
+                  <div className="text-xs lattice-status-primary mb-1 font-semibold">Julian Date</div>
+                  <div className="text-lg font-bold lattice-text-primary lattice-text-mono">
+                    {Math.floor((currentTime.getTime() / 86400000) + 2440587.5)}
+                  </div>
+                  <div className="text-xs lattice-text-secondary">Days since epoch</div>
+                </div>
+              </div>
+
+              {/* Unix Timestamp */}
+              <div className="lattice-panel p-3">
+                <div className="text-xs lattice-status-primary mb-1 font-semibold">Unix Timestamp</div>
+                <div className="text-lg font-bold lattice-text-primary lattice-text-mono">
+                  {Math.floor(currentTime.getTime() / 1000)}
+                </div>
+                <div className="text-xs lattice-text-secondary">Seconds since January 1, 1970 UTC</div>
+              </div>
             </div>
           </div>
         </div>
@@ -412,46 +1169,44 @@ export default function App() {
 
       {/* GPS Modal */}
       {showGpsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-[9999]">
           <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold lattice-text-primary">GPS Status</h3>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <Satellite className="h-5 w-5 lattice-status-primary" />
+                <h2 className="text-lg font-semibold lattice-text-primary">GPS Information</h2>
+              </div>
               <button
                 onClick={() => setShowGpsModal(false)}
                 className="lattice-text-muted hover:lattice-text-primary transition-colors"
               >
-                ×
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Status:</span>
-                <span className="lattice-status-good font-semibold">{gpsData.fix_quality}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Satellites:</span>
-                <span className="lattice-text-primary font-semibold">{gpsData.satellites}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">HDOP:</span>
-                <span className="lattice-text-primary font-semibold">{gpsData.hdop?.toFixed(1)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Accuracy:</span>
-                <span className="lattice-text-primary font-semibold">±{gpsData.accuracy?.toFixed(1)}m</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Latitude:</span>
-                <span className="lattice-text-primary font-semibold">{gpsData.latitude?.toFixed(6)}°</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Longitude:</span>
-                <span className="lattice-text-primary font-semibold">{gpsData.longitude?.toFixed(6)}°</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Altitude:</span>
-                <span className="lattice-text-primary font-semibold">{gpsData.altitude}m</span>
-              </div>
+
+            <div className="space-y-4">
+              {gpsData.connected ? (
+                <>
+                  <div className="lattice-panel p-4">
+                    <div className="text-sm lattice-status-good mb-2 font-semibold">GPS Connected</div>
+                    <div className="text-xs space-y-1">
+                      {gpsData.latitude && <div>LAT: {gpsData.latitude.toFixed(6)}°</div>}
+                      {gpsData.longitude && <div>LON: {gpsData.longitude.toFixed(6)}°</div>}
+                      {gpsData.altitude && <div>ALT: {gpsData.altitude.toFixed(1)}m</div>}
+                      {gpsData.accuracy && <div>ACC: ±{gpsData.accuracy.toFixed(1)}m</div>}
+                      <div>FIX: {gpsData.fix_quality || 'NO_FIX'}</div>
+                      {gpsData.satellites && <div>SATS: {gpsData.satellites}</div>}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="lattice-panel p-4">
+                  <div className="text-sm lattice-status-error mb-2 font-semibold">GPS Disconnected</div>
+                  <div className="text-xs lattice-text-secondary">
+                    No GPS hardware detected or service unavailable
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -459,35 +1214,100 @@ export default function App() {
 
       {/* Network Modal */}
       {showNetworkModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold lattice-text-primary">Network Status</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <div className="lattice-panel-elevated p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto lattice-scrollbar">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                {isOnline ? (
+                  <Wifi className="h-5 w-5 lattice-status-good" />
+                ) : (
+                  <WifiOff className="h-5 w-5 lattice-status-error" />
+                )}
+                <h2 className="text-lg font-semibold lattice-text-primary">Network Information</h2>
+              </div>
               <button
                 onClick={() => setShowNetworkModal(false)}
                 className="lattice-text-muted hover:lattice-text-primary transition-colors"
               >
-                ×
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Connection:</span>
-                <span className={`font-semibold ${isOnline ? 'lattice-status-good' : 'lattice-status-error'}`}>
-                  {isOnline ? 'ONLINE' : 'OFFLINE'}
-                </span>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Connection Status */}
+              <div className="lattice-panel p-4">
+                <div className={`text-sm mb-2 font-semibold ${isOnline ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                  Connection Status
+                </div>
+                <div className="text-xs space-y-1">
+                  <div>Status: <span className={`font-semibold ${isOnline ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span></div>
+                  <div>Online Since: <span className="lattice-text-primary font-semibold">{networkInfo.onlineSince.toLocaleTimeString()}</span></div>
+                  {networkInfo.downtime > 0 && <div>Downtime: {networkInfo.downtime}s</div>}
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Type:</span>
-                <span className="lattice-text-primary font-semibold">
-                  {(navigator as any).connection?.effectiveType || 'Unknown'}
-                </span>
+
+              {/* IP Addresses */}
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">IP Addresses</div>
+                <div className="text-xs space-y-1">
+                  <div>Local IP: <span className="lattice-text-primary font-semibold lattice-text-mono">{networkInfo.ipAddress}</span></div>
+                  <div>Public IP: <span className="lattice-text-primary font-semibold lattice-text-mono">{networkInfo.publicIp}</span></div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">User Agent:</span>
-                <span className="lattice-text-primary font-semibold text-xs break-all">
-                  {navigator.userAgent.split(' ')[0]}
-                </span>
+
+              {/* Connection Details */}
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Connection Details</div>
+                <div className="text-xs space-y-1">
+                  <div>Type: <span className="lattice-text-primary font-semibold">{networkInfo.connectionType}</span></div>
+                  <div>Effective Type: <span className="lattice-text-primary font-semibold">{networkInfo.effectiveType}</span></div>
+                  {networkInfo.downlink > 0 && <div>Downlink: <span className="lattice-text-primary font-semibold">{networkInfo.downlink} Mbps</span></div>}
+                  {networkInfo.rtt > 0 && <div>RTT: <span className="lattice-text-primary font-semibold">{networkInfo.rtt} ms</span></div>}
+                </div>
+              </div>
+
+              {/* Browser Information */}
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Browser Information</div>
+                <div className="text-xs space-y-1">
+                  <div>Platform: <span className="lattice-text-primary font-semibold">{networkInfo.platform}</span></div>
+                  <div>Language: <span className="lattice-text-primary font-semibold">{networkInfo.language}</span></div>
+                  <div>Cookies: <span className={`font-semibold ${networkInfo.cookieEnabled ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                    {networkInfo.cookieEnabled ? 'Enabled' : 'Disabled'}
+                  </span></div>
+                  <div>Java: <span className={`font-semibold ${networkInfo.javaEnabled ? 'lattice-status-good' : 'lattice-status-error'}`}>
+                    {networkInfo.javaEnabled ? 'Enabled' : 'Disabled'}
+                  </span></div>
+                </div>
+              </div>
+
+              {/* Display Information */}
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Display Information</div>
+                <div className="text-xs space-y-1">
+                  <div>Screen: <span className="lattice-text-primary font-semibold">{networkInfo.screenResolution}</span></div>
+                  <div>Color Depth: <span className="lattice-text-primary font-semibold">{networkInfo.colorDepth}-bit</span></div>
+                  <div>Viewport: <span className="lattice-text-primary font-semibold">{window.innerWidth}x{window.innerHeight}</span></div>
+                </div>
+              </div>
+
+              {/* Timezone Information */}
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Timezone Information</div>
+                <div className="text-xs space-y-1">
+                  <div>Timezone: <span className="lattice-text-primary font-semibold">{networkInfo.timezone}</span></div>
+                  <div>UTC Offset: <span className="lattice-text-primary font-semibold">{-networkInfo.timezoneOffset / 60}h</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* User Agent - Full Width */}
+            <div className="lattice-panel p-4 mt-4">
+              <div className="text-sm lattice-status-primary mb-2 font-semibold">User Agent</div>
+              <div className="text-xs lattice-text-mono lattice-text-primary break-all">
+                {networkInfo.userAgent}
               </div>
             </div>
           </div>
@@ -496,73 +1316,48 @@ export default function App() {
 
       {/* Viewport Info Modal */}
       {showViewportInfo && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-[9999]">
           <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold lattice-text-primary">Viewport Information</h3>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <Grid3X3 className="h-5 w-5 lattice-status-primary" />
+                <h2 className="text-lg font-semibold lattice-text-primary">Viewport Information</h2>
+              </div>
               <button
                 onClick={() => setShowViewportInfo(false)}
                 className="lattice-text-muted hover:lattice-text-primary transition-colors"
               >
-                ×
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Window Size:</span>
-                <span className="lattice-text-primary font-semibold">
-                  {window.innerWidth} × {window.innerHeight}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Screen Size:</span>
-                <span className="lattice-text-primary font-semibold">
-                  {window.screen.width} × {window.screen.height}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Device Pixel Ratio:</span>
-                <span className="lattice-text-primary font-semibold">{window.devicePixelRatio}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Grid Size:</span>
-                <span className="lattice-text-primary font-semibold">{gridSize} panels</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="lattice-text-secondary">Layout Mode:</span>
-                <span className="lattice-text-primary font-semibold">{isLocked ? 'Single Panel' : 'Grid Layout'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Grid Selector Modal */}
-      {showGridSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="lattice-panel-elevated p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold lattice-text-primary">Grid Layout</h3>
-              <button
-                onClick={() => setShowGridSelector(false)}
-                className="lattice-text-muted hover:lattice-text-primary transition-colors"
-              >
-                ×
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {[1, 2, 4, 6, 8, 9].map((size) => (
-                <button
-                  key={size}
-                  onClick={() => handleGridSizeChange(size)}
-                  className={`lattice-button p-4 text-center ${
-                    gridSize === size ? 'lattice-button-primary' : ''
-                  }`}
-                >
-                  <div className="text-lg font-semibold">{size}</div>
-                  <div className="text-xs">Panel{size !== 1 ? 's' : ''}</div>
-                </button>
-              ))}
+            <div className="space-y-4">
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Window Dimensions</div>
+                <div className="text-xs space-y-1">
+                  <div>Width: <span className="lattice-text-primary font-semibold">{window.innerWidth}px</span></div>
+                  <div>Height: <span className="lattice-text-primary font-semibold">{window.innerHeight}px</span></div>
+                  <div>Ratio: <span className="lattice-text-primary font-semibold">{(window.innerWidth / window.innerHeight).toFixed(2)}</span></div>
+                </div>
+              </div>
+
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Grid Container</div>
+                <div className="text-xs space-y-1">
+                  <div>Available: <span className="lattice-text-primary font-semibold">{window.innerHeight - 80}px</span> <span className="lattice-text-secondary">(window - 80px header)</span></div>
+                  <div>Grid Units: <span className="lattice-text-primary font-semibold">{Math.max(...(layouts.lg || []).map(item => item.y + item.h))} units</span></div>
+                  <div>Row Height: <span className="lattice-text-primary font-semibold">~{Math.floor((window.innerHeight - 100) / Math.max(...(layouts.lg || []).map(item => item.y + item.h)))}px</span></div>
+                </div>
+              </div>
+
+              <div className="lattice-panel p-4">
+                <div className="text-sm lattice-status-primary mb-2 font-semibold">Layout Status</div>
+                <div className="text-xs space-y-1">
+                  <div>Panels: <span className="lattice-text-primary font-semibold">{panels.length}</span></div>
+                  <div>Preset: <span className="lattice-text-primary font-semibold">{currentGridPreset}</span></div>
+                  <div>Locked: <span className={`font-semibold ${isLayoutLocked ? 'lattice-status-good' : 'lattice-status-warning'}`}>{isLayoutLocked ? 'Yes' : 'No'}</span></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

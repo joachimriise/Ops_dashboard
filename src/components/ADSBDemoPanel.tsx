@@ -140,6 +140,31 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
 // Trondheim Airport coordinates
 const TRONDHEIM_AIRPORT = { lat: 63.4578, lon: 10.9239 };
 
+// Generate low altitude demo aircraft that enters airspace every 5 minutes
+const generateLowAltitudeAircraft = (timeOffset: number): Aircraft => {
+  const angle = (timeOffset / 300000) * 360; // Complete circle every 5 minutes
+  const distance = 0.08; // Close to airport
+  
+  const lat = TRONDHEIM_AIRPORT.lat + (distance * Math.cos(angle * Math.PI / 180));
+  const lon = TRONDHEIM_AIRPORT.lon + (distance * Math.sin(angle * Math.PI / 180));
+  
+  return {
+    icao: 'LOW001',
+    callsign: 'APPROACH',
+    aircraft_type: 'Boeing 737',
+    squawk: '1200',
+    altitude: 800, // Below 1000ft
+    speed: 180,
+    heading: (angle + 90) % 360,
+    vertical_rate: -200,
+    latitude: lat,
+    longitude: lon,
+    last_seen: new Date(),
+    distance: getDistance(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, lat, lon),
+    bearing: getBearing(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, lat, lon)
+  };
+};
+
 // Generate demo aircraft around Trondheim
 const generateDemoAircraft = (): Aircraft[] => {
   const demoFlights = [
@@ -248,33 +273,54 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
     // Update aircraft positions every 5 seconds
     const interval = setInterval(() => {
       setAircraft(prev => prev.map(ac => {
-        // Simulate movement
-        const speed = ac.speed / 3600; // Convert to km/s
-        const distance = speed * 5; // 5 seconds of movement
-        const headingRad = ac.heading * Math.PI / 180;
-        
-        const deltaLat = (distance / 111) * Math.cos(headingRad); // Rough conversion
-        const deltaLon = (distance / (111 * Math.cos(ac.latitude * Math.PI / 180))) * Math.sin(headingRad);
-        
-        const newLat = ac.latitude + deltaLat;
-        const newLon = ac.longitude + deltaLon;
-        
-        return {
-          ...ac,
-          latitude: newLat,
-          longitude: newLon,
-          last_seen: new Date(),
-          distance: getDistance(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, newLat, newLon),
-          bearing: getBearing(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, newLat, newLon),
-          // Add some random variation
-          altitude: ac.altitude + (Math.random() - 0.5) * 100,
-          speed: Math.max(50, ac.speed + (Math.random() - 0.5) * 20),
-          heading: (ac.heading + (Math.random() - 0.5) * 10 + 360) % 360
-        };
+        if (ac.icao === 'LOW001') {
+          // Special handling for low altitude demo aircraft
+          return generateLowAltitudeAircraft(Date.now());
+        } else {
+          // Simulate movement for regular aircraft
+          const speed = ac.speed / 3600; // Convert to km/s
+          const distance = speed * 5; // 5 seconds of movement
+          const headingRad = ac.heading * Math.PI / 180;
+          
+          const deltaLat = (distance / 111) * Math.cos(headingRad); // Rough conversion
+          const deltaLon = (distance / (111 * Math.cos(ac.latitude * Math.PI / 180))) * Math.sin(headingRad);
+          
+          const newLat = ac.latitude + deltaLat;
+          const newLon = ac.longitude + deltaLon;
+          
+          return {
+            ...ac,
+            latitude: newLat,
+            longitude: newLon,
+            last_seen: new Date(),
+            distance: getDistance(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, newLat, newLon),
+            bearing: getBearing(TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon, newLat, newLon),
+            // Add some random variation
+            altitude: ac.altitude + (Math.random() - 0.5) * 100,
+            speed: Math.max(50, ac.speed + (Math.random() - 0.5) * 20),
+            heading: (ac.heading + (Math.random() - 0.5) * 10 + 360) % 360
+          };
+        }
       }));
       setLastUpdate(new Date());
     }, 5000);
 
+    // Add low altitude aircraft every 5 minutes
+    const lowAltInterval = setInterval(() => {
+      setAircraft(prev => {
+        // Remove existing low altitude demo aircraft
+        const filtered = prev.filter(ac => ac.icao !== 'LOW001');
+        // Add new low altitude aircraft
+        return [...filtered, generateLowAltitudeAircraft(Date.now())];
+      });
+    }, 300000); // 5 minutes
+
+    // Add initial low altitude aircraft
+    setTimeout(() => {
+      setAircraft(prev => [...prev, generateLowAltitudeAircraft(Date.now())]);
+    }, 10000); // Add after 10 seconds
+
+      clearInterval(lowAltInterval);
     return () => clearInterval(interval);
   }, []);
 
@@ -290,6 +336,9 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
     
     return true;
   });
+
+  // Check if there are any aircraft below 1000ft
+  const hasLowAltitudeAircraft = filteredAircraft.some(ac => ac.altitude < 1000);
 
   const getAltitudeColor = (altitude: number) => {
     if (altitude < 5000) return 'lattice-status-error';
@@ -397,11 +446,11 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                   center={[TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]}
                   radius={maxRange * 1000} // Convert km to meters
                   pathOptions={{
-                    color: '#00d4ff',
+                    color: hasLowAltitudeAircraft ? '#ff4444' : '#00d4ff',
                     weight: 2,
                     opacity: 0.6,
-                    fillColor: '#00d4ff',
-                    fillOpacity: 0.1,
+                    fillColor: hasLowAltitudeAircraft ? '#ff4444' : '#00d4ff',
+                    fillOpacity: hasLowAltitudeAircraft ? 0.2 : 0.1,
                     dashArray: '5, 10'
                   }}
                 />

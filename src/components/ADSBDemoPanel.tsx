@@ -81,20 +81,7 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
         <circle cx="12" cy="12" r="2" fill="#000"/>
       </g>
     </svg>`;
-  } else {
-    // Airplane symbol using Lucide plane path
-    iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <g transform="translate(2, 2)">
-        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" 
-              fill="${color}" stroke="#000" stroke-width="1.2"/>
-        <circle cx="12" cy="12" r="1.5" fill="#000"/>
-      </g>
-    </svg>`;
-  }
-  
-  return new Icon({
-    iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg),
-             aircraftType.toLowerCase().includes('a4') ||
+  } else if (aircraftType.toLowerCase().includes('a4') ||
              aircraftType.toLowerCase().includes('b7') ||
              aircraftType.toLowerCase().includes('b74') ||
              aircraftType.toLowerCase().includes('b77') ||
@@ -124,12 +111,13 @@ const createAircraftIcon = (heading: number, altitude: number, aircraftType: str
       <polygon points="8,10 20,10 18,12 10,12" fill="${color}" opacity="0.7"/>
     </svg>`;
   } else {
-    // Improved default commercial aircraft symbol
+    // Airplane symbol using Lucide plane path
     iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" transform="rotate(${heading})">
-      <path d="M14 2L16 8L24 10L16 12L14 26L12 12L4 10L12 8L14 2Z" fill="${color}" stroke="#000" stroke-width="1.2"/>
-      <ellipse cx="14" cy="10" rx="10" ry="2.5" fill="${color}" opacity="0.6"/>
-      <rect x="13" y="7" width="2" height="14" fill="#000" opacity="0.8"/>
-      <circle cx="14" cy="14" r="1.5" fill="#000"/>
+      <g transform="translate(2, 2)">
+        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" 
+              fill="${color}" stroke="#000" stroke-width="1.2"/>
+        <circle cx="12" cy="12" r="1.5" fill="#000"/>
+      </g>
     </svg>`;
   }
   

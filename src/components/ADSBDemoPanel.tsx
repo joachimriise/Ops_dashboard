@@ -392,33 +392,6 @@ export default function ADSBDemoPanel({ onHeaderClick, isSelecting, gpsData }: A
                   className="map-lattice"
                 />
                 
-                {/* Trondheim Airport Marker */}
-                <Marker
-                  position={[TRONDHEIM_AIRPORT.lat, TRONDHEIM_AIRPORT.lon]}
-                  icon={new Icon({
-                    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="16" cy="16" r="14" fill="none" stroke="#00d4ff" stroke-width="3" opacity="0.8"/>
-                      <circle cx="16" cy="16" r="8" fill="none" stroke="#00d4ff" stroke-width="2"/>
-                      <circle cx="16" cy="16" r="3" fill="#00d4ff"/>
-                      <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#00d4ff" stroke-width="2"/>
-                    </svg>`),
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16],
-                    popupAnchor: [0, -16],
-                  })}
-                >
-                  <Popup>
-                    <div className="lattice-panel p-3 text-xs lattice-text-mono min-w-[200px]">
-                      <div className="font-semibold lattice-status-primary mb-2 text-center">Trondheim Airport</div>
-                      <div className="space-y-1">
-                        <div><span className="lattice-text-secondary">ICAO:</span> <span className="lattice-text-primary">ENVA</span></div>
-                        <div><span className="lattice-text-secondary">LAT:</span> <span className="lattice-text-primary">{TRONDHEIM_AIRPORT.lat.toFixed(6)}°</span></div>
-                        <div><span className="lattice-text-secondary">LON:</span> <span className="lattice-text-primary">{TRONDHEIM_AIRPORT.lon.toFixed(6)}°</span></div>
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-                
                 {/* Aircraft Markers */}
                 {filteredAircraft.map((aircraft) => (
                   <Marker

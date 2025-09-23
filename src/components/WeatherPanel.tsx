@@ -307,12 +307,19 @@ export default function WeatherPanel({
     setWeatherError(null);
 
     try {
-      const response = await fetch(
-        `/api/weather?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`,
-        {
-          signal: AbortSignal.timeout(10000)
+      // In production, we need to use a CORS proxy or direct API call
+      // For now, we'll use a public CORS proxy service
+      const apiUrl = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`;
+      const proxyUrl = import.meta.env.DEV 
+        ? `/api/weather?lat=${weatherLocation.lat}&lon=${weatherLocation.lon}`
+        : `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
+      
+      const response = await fetch(proxyUrl, {
+        signal: AbortSignal.timeout(10000),
+        headers: {
+          'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
         }
-      );
+      });
 
       // Read response text once
       const responseText = await response.text();
@@ -388,10 +395,17 @@ export default function WeatherPanel({
       const forecasts: AviationForecast[] = [];
       
       try {
-        const metnoUrl = `/api/aviation?icao=${nearestAirport.icao}`;
+        // Use different URLs for development vs production
+        const apiUrl = `https://api.met.no/weatherapi/tafmetar/1.0/tafmetar.txt?icao=${nearestAirport.icao}`;
+        const metnoUrl = import.meta.env.DEV 
+          ? `/api/aviation?icao=${nearestAirport.icao}`
+          : `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
         
         const response = await fetch(metnoUrl, {
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(10000),
+          headers: {
+            'User-Agent': 'MilUAS-Dashboard/1.0 (contact@example.com)'
+          }
         });
         
         if (response.ok) {

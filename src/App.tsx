@@ -13,6 +13,7 @@ import VideoPanel from './components/VideoPanel';
 import MapPanel from './components/MapPanel';
 import SoftwarePanel from './components/SoftwarePanel';
 import FlightLoggerPanel from './components/FlightLoggerPanel';
+import TimePanel from './components/TimePanel';
 import PanelSelector from './components/PanelSelector';
 
 export interface GPSData {
@@ -107,7 +108,7 @@ interface ADSBSettings {
   radiusKm: number;
 }
 
-type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'comms' | 'navigation' | 'sensors' | 'intel' | 'software' | 'flight-logger';
+type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'comms' | 'navigation' | 'sensors' | 'intel' | 'software' | 'flight-logger' | 'time';
 
 interface PanelItem {
   id: string;
@@ -842,6 +843,7 @@ export default function App() {
       map: 'TACTICAL MAP',
       software: 'SOFTWARE STATUS',
       'flight-logger': 'FLIGHT LOGGER',
+      time: 'TIME DISPLAY',
       comms: 'COMMUNICATIONS',
       navigation: 'NAVIGATION',
       sensors: 'SENSORS',
@@ -913,6 +915,8 @@ export default function App() {
         return <SoftwarePanel {...commonProps} />;
       case 'flight-logger':
         return <FlightLoggerPanel {...commonProps} />;
+      case 'time':
+        return <TimePanel {...commonProps} gpsData={gpsData} />;
       default:
         return (
           <div className="lattice-panel flex flex-col h-full">

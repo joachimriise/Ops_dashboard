@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Navigation, Cloud, Activity, Target, Video, Radio, Compass, Radar, Brain, Map, Package, Clock } from 'lucide-react';
 
-type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'software' | 'comms' | 'navigation' | 'sensors' | 'intel';
+type PanelType = 'adsb' | 'adsb-demo' | 'weather' | 'spectrum' | 'tactical' | 'video' | 'map' | 'software' | 'flight-logger' | 'time' | 'comms' | 'navigation' | 'sensors' | 'intel';
 
 interface PanelOption {
   type: PanelType;

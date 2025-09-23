@@ -68,6 +68,13 @@ const panelOptions: PanelOption[] = [
     status: 'active'
   },
   {
+    type: 'time',
+    name: 'TIME & POSITION',
+    description: 'Time zones, GPS coordinates, and grid references',
+    icon: Clock,
+    status: 'active'
+  },
+  {
     type: 'software',
     name: 'SOFTWARE STATUS',
     description: 'System version control and OTA update management',
